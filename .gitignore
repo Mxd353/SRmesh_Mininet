@@ -1,0 +1,13 @@
+# 运行时日志 (不提交)
+logs/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# eBPF 编译产物与运行时生成的配置头
+design1_responder.bpf.o
+design1_responder_cfg.h
+
+# 临时文件
+*.log
