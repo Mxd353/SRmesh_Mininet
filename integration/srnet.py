@@ -151,6 +151,25 @@ class NetPlan(object):
                 for dst, hop in self.hop[n].items()}
 
 
+def _iface_pairs(u, v, lk):
+    """把一条 Link 的两个接口映射成 {(u, v): u 侧接口, (v, u): v 侧接口}.
+
+    Link 的 intf1/intf2 不保证与 addLink 的参数顺序一致, 所以按 intf.node 判定归属.
+    """
+    out = {}
+    for intf in (lk.intf1, lk.intf2):
+        node = intf.node.name
+        if node == u:
+            out[(u, v)] = intf.name
+        elif node == v:
+            out[(v, u)] = intf.name
+        else:
+            raise ValueError('接口 %s 不属于 %s/%s' % (intf.name, u, v))
+    if len(out) != 2:
+        raise ValueError('链路 %s-%s 的接口归属有误: %s' % (u, v, out))
+    return out
+
+
 # ---- Mininet 侧 ----
 def build_mininet(plan, port=9999, timeout=3.0):
     """建拓扑 + 配地址/SID/路由 + 预热, 返回 ProbeExecutor.
@@ -169,11 +188,24 @@ def build_mininet(plan, port=9999, timeout=3.0):
         net.addHost(n, cls=Router, ip=None)
     for u, v, ms in plan.edges:
         lk = net.addLink(net[u], net[v], delay='%gms' % ms)
-        # 接口归属按 Link 的 intf.node 判定, 不假设 addLink 的参数顺序
-        for intf in (lk.intf1, lk.intf2):
-            peer = u if intf.node.name == u else v
-            plan.iface[(u, peer)] = intf.name
+        plan.iface.update(_iface_pairs(u, v, lk))
+    if len(plan.iface) != 2 * len(plan.edges):
+        raise RuntimeError('接口映射不完整: %d 条, 应为 %d 条'
+                           % (len(plan.iface), 2 * len(plan.edges)))
     net.start()
+    try:
+        _configure(net, plan)
+        macs = _macs(net, plan)
+        warmup(net, plan)
+        return ProbeExecutor(net, plan, macs, port=port, timeout=timeout)
+    except Exception:
+        net.stop()                  # 配置中途失败也要回收命名空间, 不留残留
+        raise
+
+
+def _configure(net, plan):
+    """配探针地址 / 链路地址 / SRv6 SID 行为 / SID 聚合路由."""
+    from lib.common import add6, enable_seg6, run_cmd
 
     # 探针地址 (内层目的地址) + SRv6 接收处理
     for n in plan.nodes:
@@ -201,15 +233,16 @@ def build_mininet(plan, port=9999, timeout=3.0):
                     % (plan.sid_prefix(dst), plan.addr(hop, n),
                        plan.iface_of(n, hop)))
 
-    macs = {(u, v): net[u].cmd('cat /sys/class/net/%s/address'
-                               % plan.iface_of(u, v)).strip()
-            for u, v, _ in plan.edges}
-    macs.update({(v, u): net[v].cmd('cat /sys/class/net/%s/address'
-                                    % plan.iface_of(v, u)).strip()
-                 for u, v, _ in plan.edges})
 
-    warmup(net, plan)
-    return ProbeExecutor(net, plan, macs, port=port, timeout=timeout)
+def _macs(net, plan):
+    """读每条有向链路发送侧的接口 MAC (响应端构造以太头要用)."""
+    out = {}
+    for u, v, _ in plan.edges:
+        out[(u, v)] = net[u].cmd('cat /sys/class/net/%s/address'
+                                 % plan.iface_of(u, v)).strip()
+        out[(v, u)] = net[v].cmd('cat /sys/class/net/%s/address'
+                                 % plan.iface_of(v, u)).strip()
+    return out
 
 
 def warmup(net, plan):

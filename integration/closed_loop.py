@@ -154,6 +154,10 @@ def main():
                 continue
             base_ow[(p.src, p.dst)] = r[0]
             obs.append((r[0], [link(l) for l in plan.directed_links(p.path)]))
+        if not obs:
+            summary('[FAIL] 基线探测全部失败, 先看日志里的 probe 命令/输出, '
+                    '以及 logs/responder_*.log')
+            return 1
         links = infer(link_ids, obs)
         rank, ident = identifiability(obs, link_ids)
         errs = [abs(links[l] - truth[l]) for l in ident if links.get(l) is not None]
