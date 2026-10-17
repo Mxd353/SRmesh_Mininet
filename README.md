@@ -248,6 +248,9 @@ sudo python3 design2/states_mininet.py --test
    触发不同 ECMP hash。
 7. 用 `ping` 的 RTT/2 做单向估计会被非对称回程污染，歧义观测改用
    `design2/oneway.py` 的单向时间戳。
+8. **每条路径的每一跳都要先做 NDP 预热**：只预热正向会让反向路径的首个探测包在
+   中途路由器上排队等 IPv6 邻居解析，首次 RTT 凭空多出约 80 ms（实测 129 ms vs
+   稳态 49 ms）；`design1/demo.py` 因此对正向和反向逐跳各 ping 一次。
 
 ---
 

@@ -203,9 +203,15 @@ def main():
     summary('[INFO] 环回 RTT 理论值 = %d ms (正向 %d + 反向 %d)'
             % (EXPECT_RTT, FWD_DELAY, REV_DELAY))
 
-    # NDP 预热
-    h1.cmd('ping6 -c 2 -W 2 -I %s %s >/dev/null 2>&1' % (H1_IP, H2_IP))
-    h2.cmd('ping6 -c 2 -W 2 2001:db8:2::1 >/dev/null 2>&1')
+    # NDP 预热: 正向 (h1 -> r1 -> r2 -> r4 -> h2) 和反向 (h2 -> r4 -> r3 -> r1 -> h1)
+    # 两条路径的每一跳都要先通信一次; 否则首个探测包会在中途的路由器上排队等
+    # NDP 解析 (实测反向路径首次 RTT 多出约 80 ms: 129 ms vs 49 ms).
+    h1.cmd('ping6 -c 2 -W 2 -I %s %s >/dev/null 2>&1' % (H1_IP, H2_IP))   # h1 -> h2
+    h2.cmd('ping6 -c 2 -W 2 2001:db8:2::1 >/dev/null 2>&1')                # h2 -> r4
+    for node, dst in ((r4, '2001:db8:34::3'),    # r4 -> r3
+                      (r3, R1_E3_IP),            # r3 -> r1
+                      (r1, H1_IP)):              # r1 -> h1
+        node.cmd('ping6 -c 2 -W 2 %s >/dev/null 2>&1' % dst)
 
     h2_mac = h2.cmd('cat /sys/class/net/h2-eth0/address').strip()
     r4_mac = r4.cmd('cat /sys/class/net/r4-eth3/address').strip()
