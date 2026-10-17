@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * design1_responder.bpf.c -- SRmesh Design 1 的内核态响应端 (TC ingress)
+ * responder.bpf.c -- SRmesh Design 1 的内核态响应端 (TC ingress)
  * ===============================================================
  * 挂在响应端网卡的 TC ingress. 收到探测后:
  *   1. 从 payload 取出[反向 SID 列表]
@@ -11,7 +11,7 @@
  * 线格式 (应用层协议 253, 无 L4 校验和):
  *   inner IPv6 (nxt=253) + [magic(4) probe_id(4) seq(4) tx_ns(8) rev_cnt(1) pad(3) rev_sids(16*n)]
  *
- * 配置 (MAC/IP) 由 orchestrator 运行时生成 design1_responder_cfg.h 注入.
+ * 配置 (MAC/IP) 由 orchestrator 运行时生成 responder_cfg.h 注入.
  */
 #include <linux/bpf.h>
 #include <linux/pkt_cls.h>
@@ -19,7 +19,7 @@
 #include <linux/in6.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
-#include "design1_responder_cfg.h"
+#include "responder_cfg.h"
 
 #define MAGIC        0x53526D31u   /* "SRm1" */
 #define PROBE_PROTO  253           /* 自定义探测协议 */

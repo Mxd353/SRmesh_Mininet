@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""design2_mininet.py -- SRmesh Design 2 + Mininet 端到端验证
+r"""single_mininet.py -- SRmesh Design 2 + Mininet 端到端验证 (单 ECMP 点)
 ================================================================
 
 拓扑对应论文例子 S--M--Q--T:
@@ -15,8 +15,8 @@ ECMP. 确定性链路观测使用点到点地址; 歧义观测使用不同 IPv6 
 
 用法:
 
-    sudo python3 design2_mininet.py --test
-    sudo python3 design2_mininet.py --test --capture
+    sudo python3 design2/single_mininet.py --test
+    sudo python3 design2/single_mininet.py --test --capture
 """
 import argparse
 import os
@@ -25,7 +25,10 @@ import sys
 import time
 
 if os.geteuid() != 0:
-    sys.exit("需要 root:sudo python3 design2_mininet.py --test")
+    sys.exit("需要 root: sudo python3 design2/single_mininet.py --test")
+
+# 脚本在 design2/ 下, 把仓库根加入 sys.path 以便 import lib.* 与 design2.*
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mininet.clean import cleanup
 from mininet.link import TCLink
@@ -33,9 +36,9 @@ from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.node import Node
 
-from design2 import choice, infer, link
-from mnlog import attach_file_log, detail, summary
-from common import Router, add6, enable_seg6, print_topology, run_cmd as run, section
+from design2.infer import choice, infer, link
+from lib.mnlog import attach_file_log, detail, summary
+from lib.common import Router, add6, enable_seg6, print_topology, run_cmd as run, section
 
 
 X1, X2, X3, X4, X5 = "x1", "x2", "x3", "x4", "x5"
@@ -79,7 +82,7 @@ def choose_ecmp_samples(h1, h2, expected, samples=12):
     同一个 choice([x1+x2+x5, x1+x3+x4+x5]) 约束.
     """
     values = []
-    helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "design2_oneway.py")
+    helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oneway.py")
     for i in range(samples):
         # WSL2 中 ping6 -F 可能没有 IPV6_FLOWLABEL_MGR 权限;改变源地址
         # 同样会改变 Linux ECMP 的 flow hash,且不需要特殊 capability.
@@ -114,7 +117,7 @@ def main():
     ap.add_argument("--log", default=None)
     args = ap.parse_args()
     setLogLevel("warning")
-    logpath = attach_file_log("design2_mininet", args.log)
+    logpath = attach_file_log("design2_single_mininet", args.log)
     summary(">>>>> log: %s" % logpath)
 
     cleanup()

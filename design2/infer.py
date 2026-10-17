@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""design2.py -- SRmesh Design 2 基于时延的多路径推断
+r"""infer.py -- SRmesh Design 2 基于时延的多路径推断
 ================================================================
 
 SR 把路径钉到 SID 粒度, 但 SID 对之间仍有 ECMP. 观测到端到端时延 d, 却不知道
@@ -18,7 +18,7 @@ SR 把路径钉到 SID 粒度, 但 SID 对之间仍有 ECMP. 观测到端到端�
 
 用法:
 
-    from design2 import infer
+    from design2.infer import infer
     links = infer(link_ids, observations, epsilon=10.0)
 """
 import numpy as np

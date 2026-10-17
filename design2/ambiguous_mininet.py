@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""design2_ambiguous_mininet.py -- 两个 ECMP 点的端到端真实验证
+r"""ambiguous_mininet.py -- 两个 ECMP 点的端到端真实验证
 ================================================================
 
 拓扑 (两个 ECMP 点串联):
@@ -18,7 +18,7 @@ h1 -> h2 有 2*2 = 4 种路径组合. 用 netem 注入真值时延, 链路级 pi
 
 用法:
 
-    sudo python3 design2_ambiguous_mininet.py --test
+    sudo python3 design2/ambiguous_mininet.py --test
 """
 import argparse
 import os
@@ -27,7 +27,10 @@ import sys
 import time
 
 if os.geteuid() != 0:
-    sys.exit("需要 root: sudo python3 design2_ambiguous_mininet.py --test")
+    sys.exit("需要 root: sudo python3 design2/ambiguous_mininet.py --test")
+
+# 脚本在 design2/ 下, 把仓库根加入 sys.path 以便 import lib.* 与 design2.*
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mininet.clean import cleanup
 from mininet.link import TCLink
@@ -35,9 +38,9 @@ from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.node import Node
 
-from common import Router, add6, print_topology, run_cmd, section
-from design2 import choice, infer, link
-from mnlog import attach_file_log, detail, summary
+from lib.common import Router, add6, print_topology, run_cmd, section
+from design2.infer import choice, infer, link
+from lib.mnlog import attach_file_log, detail, summary
 
 # ---- 链路 id ----
 X = ['x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7', 'x8', 'x9']
@@ -122,7 +125,7 @@ def main():
     summary(">>>>> log: %s" % logpath)
 
     here = os.path.dirname(os.path.abspath(__file__))
-    oneway = os.path.join(here, "design2_oneway.py")
+    oneway = os.path.join(here, "oneway.py")
 
     cleanup()
     net = Mininet(controller=None, link=TCLink)

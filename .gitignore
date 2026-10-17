@@ -3,15 +3,15 @@ logs/
 
 # 本地拓扑图与绘图脚本 (不提交)
 topo/
-topo_viz.py
+tools/topo_viz.py
 
 # Python 缓存
 __pycache__/
 *.pyc
 
 # eBPF 编译产物与运行时生成的配置头
-design1_responder.bpf.o
-design1_responder_cfg.h
+design1/responder.bpf.o
+design1/responder_cfg.h
 
 # 临时文件
 *.log

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""design2_oneway.py -- SRmesh Design 2 单向 UDP 时间戳探测工具
+r"""oneway.py -- SRmesh Design 2 单向 UDP 时间戳探测工具
 ================================================================
 
 用发送端时间戳减接收端时间戳得到单向时延, 避免 ping RTT/2 被非对称回程污染.
@@ -7,8 +7,8 @@ r"""design2_oneway.py -- SRmesh Design 2 单向 UDP 时间戳探测工具
 
 用法 (在 Mininet 节点内):
 
-    python3 design2_oneway.py recv <port> <count> <timeout>
-    python3 design2_oneway.py send <dst> <port> <source> <count> <interval>
+    python3 design2/oneway.py recv <port> <count> <timeout>
+    python3 design2/oneway.py send <dst> <port> <source> <count> <interval>
 """
 import socket
 import struct

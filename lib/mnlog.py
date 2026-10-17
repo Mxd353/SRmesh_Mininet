@@ -8,8 +8,8 @@ logger 挂一个 FileHandler, 让终端上看到的所有内容同时写进日�
 
 用法:
 
-    from mnlog import attach_file_log
-    logpath = attach_file_log('design1_demo')            # 自动命名到 logs/
+    from lib.mnlog import attach_file_log
+    logpath = attach_file_log('design1_demo')            # 自动命名到仓库根 logs/
     logpath = attach_file_log('design1_demo', '/tmp/x')  # 指定路径
 """
 import os
@@ -27,7 +27,9 @@ def attach_file_log(script, logfile=None):
         return None
 
     if logfile is None:
-        d = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+        # 日志统一落在仓库根 logs/ (本文件在 lib/ 下, 故取上一级)
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        d = os.path.join(root, 'logs')
         os.makedirs(d, exist_ok=True)
         logfile = os.path.join(
             d, '%s_%s.log' % (script, time.strftime('%Y%m%d_%H%M%S')))

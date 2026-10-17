@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""design1_probe.py -- SRmesh Design 1 发起端与响应端 (用户态版)
+r"""probe.py -- SRmesh Design 1 发起端与响应端 (用户态版)
 ================================================================
 
 实现 SRmesh 的确定性 SR 环回探测:
@@ -22,9 +22,9 @@ payload 线格式 (24 字节头 + 16*n):
 
 用法 (在 Mininet 节点内):
 
-    python3 design1_probe.py respond --port 9999 --iface h2-eth0 --me 2001:db8:2::2 \
+    python3 design1/probe.py respond --port 9999 --iface h2-eth0 --me 2001:db8:2::2 \
         --my-mac <h2 mac> --gw-mac <r4 mac>
-    python3 design1_probe.py probe --dst 2001:db8:2::2 --port 9999 \
+    python3 design1/probe.py probe --dst 2001:db8:2::2 --port 9999 \
         --rev-sid 2001:db8:100::3 --rev-sid 2001:db8:100::1 --count 3
 """
 import argparse

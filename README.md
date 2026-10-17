@@ -5,32 +5,51 @@ Latency Bottleneck Links in SRv6 Networks*（**ICNP 2025, CCF-B**）的核心设
 全部跑在真实 Linux 数据面上（内核 SRv6 / IPv6 ECMP / netem），不依赖模拟器；
 算法在本仓**独立实现**，不复用作者源码。
 
-复现内容分两部分：
+复现内容分三部分，目前已完成前两部分：
 
 - **Design 1 — 确定性 SR 环回探测**：用 SRv6 把探测包的**正向和反向路径都钉死**，
   把一个包的端到端 RTT 精确归因到指定路径。
 - **Design 2 — 基于时延的多路径推断**：SR 的 SID 之间仍有 ECMP 歧义，用少量端到端
   观测反解每条链路的时延，定位瓶颈。
 
+> Design 3（拓扑无关的渐进式诊断：分区剪枝 + 渐进探测 + 跨切片故障优先）是纯探测
+> 规划算法，待实现；目录结构已为它预留 `design3/`。
+
 ---
 
 ## 目录结构
 
-| 文件 | 作用 |
-| --- | --- |
-| `common.py` | 共享 Mininet/SRv6 工具：`Router`、`add6`、`enable_seg6`、`run_cmd`、`section`、`print_topology` |
-| `mnlog.py` | 日志落盘（Mininet 的 info 输出走 stderr，直接重定向会丢） |
-| `design1_demo.py` | Design 1 编排：钻石拓扑 + SID 行为（End.X/End.DX6）+ 按模式启动探测/响应 |
-| `design1_probe.py` | Design 1 的**发起端 + 用户态响应端**（3 个子命令，见下） |
-| `design1_responder.bpf.c` | Design 1 的**内核态** TC eBPF 响应端（`bpf_skb_adjust_room` 扩包 + 构造 SRH + `bpf_redirect`） |
-| `design2.py` | Design 2 推断算法（论文式 1–4 + Algorithm 1），附内置自测与合成场景评估 |
-| `design2_mininet.py` | Design 2 端到端：单 ECMP 点，netem 真值 + IPv6 ECMP 观测 + SRv6 定向观测 |
-| `design2_ambiguous_mininet.py` | Design 2 端到端：两个 ECMP 点串联，理论 4 种路径组合 |
-| `design2_states_mininet.py` | Design 2 端到端：三个 ECMP 点，一次运行覆盖 A/B/C/D 四种分支状态 |
-| `design2_oneway.py` | 单向 UDP 时间戳探测工具（避免 ping RTT/2 被非对称回程污染） |
+按「共享库 + 每个 Design 一个目录」组织：
 
-运行产物：`logs/` 存放每次 Mininet 脚本的完整日志；`design1_responder.bpf.o` 与
-`design1_responder_cfg.h` 是 `--ebpf` 模式的编译/生成物（均已被 `.gitignore` 忽略）。
+```text
+lib/        共享库（Mininet/SRv6 工具 + 日志落盘）
+design1/    确定性 SR 环回探测
+design2/    基于时延的多路径推断
+design3/    拓扑无关的渐进式诊断（待实现）
+tools/      本地工具（拓扑绘图，不提交）
+logs/ topo/ 运行时产物（不提交）
+```
+
+| 文件                            | 作用                                                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `lib/common.py`                 | 共享 Mininet/SRv6 工具：`Router`、`add6`、`enable_seg6`、`run_cmd`、`section`、`print_topology` |
+| `lib/mnlog.py`                  | 日志落盘（Mininet 的 info 输出走 stderr，直接重定向会丢）                                       |
+| `design1/demo.py`               | Design 1 编排：钻石拓扑 + SID 行为（End.X/End.DX6）+ 按模式启动探测/响应                        |
+| `design1/probe.py`              | Design 1 的**发起端 + 用户态响应端**（3 个子命令，见下）                                        |
+| `design1/responder.bpf.c`       | Design 1 的**内核态** TC eBPF 响应端（`bpf_skb_adjust_room` 扩包 + 构造 SRH + `bpf_redirect`）  |
+| `design2/infer.py`              | Design 2 推断算法（论文式 1–4 + Algorithm 1），附内置自测与合成场景评估                         |
+| `design2/single_mininet.py`     | Design 2 端到端：单 ECMP 点，netem 真值 + IPv6 ECMP 观测 + SRv6 定向观测                        |
+| `design2/ambiguous_mininet.py`  | Design 2 端到端：两个 ECMP 点串联，理论 4 种路径组合                                            |
+| `design2/states_mininet.py`     | Design 2 端到端：三个 ECMP 点，一次运行覆盖 A/B/C/D 四种分支状态                                |
+| `design2/oneway.py`             | 单向 UDP 时间戳探测工具（避免 ping RTT/2 被非对称回程污染）                                     |
+
+子目录里的脚本用 `__file__` 定位仓库根并加入 `sys.path`，再
+`from lib.common import ...` / `from design2.infer import ...`，因此不依赖当前工作目录；
+下文命令统一写成从仓库根运行。
+
+运行产物：`logs/` 存放每次 Mininet 脚本的完整日志；`design1/responder.bpf.o` 与
+`design1/responder_cfg.h` 是 `--ebpf` 模式的编译/生成物，和 `tools/topo_viz.py` 一样
+已被 `.gitignore` 忽略。
 
 ---
 
@@ -39,7 +58,7 @@ Latency Bottleneck Links in SRv6 Networks*（**ICNP 2025, CCF-B**）的核心设
 核心思想：探测包用 SRv6 把**正向和反向路径都注好 SID**，让一个探测包只走一条
 确定路径，从而把 RTT 精确归因到该路径。
 
-```
+```text
 h1(发起) --正向 [r2_sid, r4_sid] 经 r2--► r4 -(End.DX6)-> h2(响应)
    ▲                                                      |
    +--反向 [r3_sid, r1_sid] 经 r3◄-- r1 ◄-(重建 SRH 回发)-+
@@ -54,21 +73,21 @@ h1(发起) --正向 [r2_sid, r4_sid] 经 r2--► r4 -(End.DX6)-> h2(响应)
 
 ### 两条实现路径
 
-`design1_probe.py` 承载发起端与**用户态**响应端，`design1_responder.bpf.c` 是
-**内核态**响应端。`design1_demo.py` 按开关选择路径：
+`design1/probe.py` 承载发起端与**用户态**响应端，`design1/responder.bpf.c` 是
+**内核态**响应端。`design1/demo.py` 按开关选择路径：
 
+```shell
+design1/demo.py --ebpf   ->  design1/responder.bpf.c (内核态响应) + design1/probe.py probe-raw(发起)
+design1/demo.py (默认)   ->  design1/probe.py respond (用户态响应) + design1/probe.py probe (发起)
 ```
-design1_demo.py --ebpf   ->  design1_responder.bpf.c (内核态响应) + design1_probe.py probe-raw(发起)
-design1_demo.py (默认)   ->  design1_probe.py respond (用户态响应) + design1_probe.py probe (发起)
-```
 
-`design1_probe.py` 的三个子命令：
+`design1/probe.py` 的三个子命令：
 
-| 子命令 | 角色 | 使用方 |
-| --- | --- | --- |
-| `probe-raw` | 发起端（协议 253 原始套接字） | `--ebpf` 模式 |
-| `probe` | 发起端（UDP） | 默认（用户态）模式 |
-| `respond` | 用户态响应端（AF_PACKET 重建反向 SRH） | 默认（用户态）模式 |
+| 子命令      | 角色                                   | 使用方             |
+| ----------- | -------------------------------------- | ------------------ |
+| `probe-raw` | 发起端（协议 253 原始套接字）          | `--ebpf` 模式      |
+| `probe`     | 发起端（UDP）                          | 默认（用户态）模式 |
+| `respond`   | 用户态响应端（AF_PACKET 重建反向 SRH） | 默认（用户态）模式 |
 
 > 用户态路径（`probe` + `respond`）不依赖 eBPF 工具链（无需 bpftool/clang），
 > 可独立验证「反向列表藏 payload + 重建 SRH」机制；内核态路径（`probe-raw` +
@@ -79,7 +98,7 @@ design1_demo.py (默认)   ->  design1_probe.py respond (用户态响应) + desi
 用户态与 eBPF 共用同一线格式（24 字节头 + 16×n），magic `0x53526D31`（"SRm1"），
 网络字节序（探测端 `!I` 打包，eBPF 端用 `bpf_ntohl()` 读取）：
 
-```
+```text
 magic(4) probe_id(4) seq(4) tx_ns(8) rev_cnt(1) pad(3) [rev_sid(16)]*n
 ```
 
@@ -91,7 +110,7 @@ SR 把路径钉到 SID 粒度，但 SID 对之间仍有 ECMP。观测到端到�
 内部走了哪条分支，就无法把 d 拆到具体链路、定位瓶颈。Design 2 把「走了哪条分支」
 当作未知量，用少量观测反解链路时延。
 
-### 数据模型（`design2.py`）
+### 数据模型（`design2/infer.py`）
 
 - **链路**：字符串 id（如 `x1`）。
 - **观测**：`Observation(delay, segments)`，`segments` 每项为：
@@ -108,12 +127,12 @@ SR 把路径钉到 SID 粒度，但 SID 对之间仍有 ECMP。观测到端到�
 
 ### Mininet 端到端验证
 
-- `design2_mininet.py`：拓扑 `S--M--Q--T`，r1→h2 按 flow hash 做 ECMP（直连 x2 或
+- `design2/single_mininet.py`：拓扑 `S--M--Q--T`，r1→h2 按 flow hash 做 ECMP（直连 x2 或
   绕行 x3+x4）。确定性链路观测用点到点 ping 的 RTT/2；歧义观测用单向 UDP 时间戳，
   并用不同源地址触发不同 ECMP 分支。
-- `design2_ambiguous_mininet.py`：两个 ECMP 点串联，h1→h2 理论 2×2 = 4 种路径组合，
+- `design2/ambiguous_mininet.py`：两个 ECMP 点串联，h1→h2 理论 2×2 = 4 种路径组合，
   用 32 个单向样本聚成代表时延喂给推断算法。
-- `design2_states_mininet.py`：链式三个 ECMP 点，锚点配置各不相同，一次运行同时覆盖
+- `design2/states_mininet.py`：链式三个 ECMP 点，锚点配置各不相同，一次运行同时覆盖
   Phase 2 的四种分支状态。
 
 > 输入**只**包含测量值，不把样本的真实分支标签泄漏给算法：歧义观测统一表示为同一
@@ -125,14 +144,14 @@ SR 把路径钉到 SID 粒度，但 SID 对之间仍有 ECMP。观测到端到�
 取 `err` 最小者；若次优与最优之差 ≤ `epsilon` 判为不可辨识。`infer` 的 `trace`
 参数记录每次解析落在哪一类：
 
-| 分支状态 | 判据 | 是否产生新信息 |
-| --- | --- | --- |
-| A 全已知 | `unk = 0` | 否，幂等空转（仅确认分支归属） |
-| C 单未知 | `unk = 1` | 是，反解该链路 = residual |
-| D 多未知 | `unk ≥ 2` | 部分，只能给“和”，不落具体链路 |
-| B 两分支都无锚点 | 次优 err − 最优 err ≤ `epsilon` | 否，不可辨识，跳过 |
+| 分支状态         | 判据                            | 是否产生新信息                 |
+| ---------------- | ------------------------------- | ------------------------------ |
+| A 全已知         | `unk = 0`                       | 否，幂等空转（仅确认分支归属） |
+| C 单未知         | `unk = 1`                       | 是，反解该链路 = residual      |
+| D 多未知         | `unk ≥ 2`                       | 部分，只能给“和”，不落具体链路 |
+| B 两分支都无锚点 | 次优 err − 最优 err ≤ `epsilon` | 否，不可辨识，跳过             |
 
-`design2_states_mininet.py` 三个 ECMP 点的锚点配置分别对应 A+C、D、B，一次运行即可
+`design2/states_mininet.py` 三个 ECMP 点的锚点配置分别对应 A+C、D、B，一次运行即可
 全部命中（终端与日志会打印覆盖报告）。
 
 ---
@@ -141,37 +160,54 @@ SR 把路径钉到 SID 粒度，但 SID 对之间仍有 ECMP。观测到端到�
 
 ```bash
 # --- Design 1 ---
-sudo python3 design1_demo.py --capture          # 用户态响应端
-sudo python3 design1_demo.py --ebpf --capture   # 内核态 eBPF 响应端（需 bpftool + libbpf-dev + clang）
+sudo python3 design1/demo.py --capture          # 用户态响应端
+sudo python3 design1/demo.py --ebpf --capture   # 内核态 eBPF 响应端（需 bpftool + libbpf-dev + clang）
 
 # --- Design 2 ---
-python3 design2.py                              # 算法自测 + 合成场景（无需 root）
-sudo python3 design2_mininet.py --test          # 单 ECMP 点：Mininet + netem 真值
-sudo python3 design2_ambiguous_mininet.py --test # 两个 ECMP 点（4 种路径组合）
-sudo python3 design2_states_mininet.py --test   # 三个 ECMP 点：覆盖 A/B/C/D 四种分支状态
+python3 design2/infer.py                              # 算法自测 + 合成场景（无需 root）
+sudo python3 design2/single_mininet.py --test         # 单 ECMP 点：Mininet + netem 真值
+sudo python3 design2/ambiguous_mininet.py --test      # 两个 ECMP 点（4 种路径组合）
+sudo python3 design2/states_mininet.py --test         # 三个 ECMP 点：覆盖 A/B/C/D 四种分支状态
+
+# --- 本地工具 ---
+python3 tools/topo_viz.py                             # 生成 topo/design2_states_mininet.{dot,png,svg}
 ```
 
-`design1_demo.py --ebpf` 会**自动**：读取 MAC/ifindex 生成 `design1_responder_cfg.h`
+`design1/demo.py --ebpf` 会**自动**：读取 MAC/ifindex 生成 `design1/responder_cfg.h`
 → clang 编译 → `tc filter add` 挂到 `h2-eth0` ingress。所有 Mininet 脚本都会把终端
 输出同时写入 `logs/<脚本名>_<时间戳>.log`，并在**开始测量前**打印一份文字拓扑
 （`print_topology`：节点清单 + 链路表 + 邻接表）：
 
-```
-sudo python3 design2_states_mininet.py --test
+```shell
+sudo python3 design2/states_mininet.py --test
 # 终端: == 拓扑 == 节点/链路/邻接表
 ```
+
+脚本把**关键结果**以 `[RESULT]` 前缀（同时进终端与日志）打印出来，原始命令输出只写日志
+（`[INFO]`/`[RESULT]` 之外的细节走 `detail`）。例如 `design1/demo.py`：
+
+```
+[INFO] 正向 (内核 encap): h1 -> r1 -> r2 -> r4 -> h2, SID = [2001:db8:100::2, 2001:db8:100::4], 理论单向 6 ms
+[INFO] 反向 (payload 藏列表): h2 -> r4 -> r3 -> r1 -> h1, SID = [2001:db8:100::3, 2001:db8:100::1], 理论单向 42 ms
+[INFO] 环回 RTT 理论值 = 48 ms (正向 6 + 反向 42)
+[RESULT] 环回探测 (用户态响应端): 4/4 成功, RTT min/avg/max = 47.998/48.107/48.201 ms (理论 48 ms, 偏差 +0.107 ms)
+[RESULT] 响应端: 重建并回发 4 个包, 反向 SRH = [2001:db8:100::3, 2001:db8:100::1]
+```
+
+`--ebpf` 另给 `[RESULT] eBPF 命中: N 个包`，`--capture` 另给
+`[RESULT] 抓包 SRH: 正向 = [...], 反向 = [...]`（证明双向都被钉死）。
 
 ---
 
 ## 结果
 
-### 算法层自测（`python3 design2.py`，确定性、可复现）
+### 算法层自测（`python3 design2/infer.py`，确定性、可复现）
 
-| 场景 | MAE | 瓶颈定位 |
-| --- | ---: | --- |
-| 论文数值例子（无噪） | 0.00 | 检出 x2 |
-| 菱形 ECMP（歧义指向瓶颈） | 1.25 | 检出 AT |
-| 菱形 ECMP + 噪声 | 2.00 | 检出 AT |
+| 场景                      |  MAE | 瓶颈定位 |
+| ------------------------- | ---: | -------- |
+| 论文数值例子（无噪）      | 0.00 | 检出 x2  |
+| 菱形 ECMP（歧义指向瓶颈） | 1.25 | 检出 AT  |
+| 菱形 ECMP + 噪声          | 2.00 | 检出 AT  |
 
 内置自测：论文数值例子全部正确；歧义反解正确（观测偏离锚点 → 反解未知分支）；
 不可辨识场景按预期走均值兜底（推断 5，真值 7，属设计内偏差）。
@@ -184,7 +220,7 @@ sudo python3 design2_states_mininet.py --test
 **两个 ECMP 点**：9 条链路全部推断到真值附近，MAE ≈ 0.10 ms；瓶颈 x2 检出
 （x6 = 20 ms 处于阈值边缘，属阈值选择问题）。
 
-**分支状态覆盖**（`design2_states_mininet.py`）：一次运行命中 A/B/C/D 全部四种；
+**分支状态覆盖**（`design2/states_mininet.py`）：一次运行命中 A/B/C/D 全部四种；
 其中只有 C 会反解出未锚定链路（x3），D/B 信息不足，按设计走均值兜底。
 
 > 说明：Mininet 场景里每条链路都有确定性观测直接测出，端到端 ECMP 样本主要用于
@@ -196,7 +232,7 @@ sudo python3 design2_states_mininet.py --test
 
 - WSL2，kernel 6.18，内核内置 SRv6（`IPV6_SEG6_LWTUNNEL=y` / `NET_CLS_BPF=y`）
 - Mininet 2.3.0、iproute2 6.19、Python 3.14（`numpy` 2.4）、clang 21、bpftool 7.7
-- 用户态路径与 `design2.py` 仅需 Python 标准库 + numpy
+- 用户态路径与 `design2/infer.py` 仅需 Python 标准库 + numpy
 
 ---
 
@@ -211,7 +247,7 @@ sudo python3 design2_states_mininet.py --test
 6. WSL2 上 `ping6 -F`（flow label）常无 `IPV6_FLOWLABEL_MGR` 权限，改用**多源地址**
    触发不同 ECMP hash。
 7. 用 `ping` 的 RTT/2 做单向估计会被非对称回程污染，歧义观测改用
-   `design2_oneway.py` 的单向时间戳。
+   `design2/oneway.py` 的单向时间戳。
 
 ---
 

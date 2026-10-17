@@ -6,11 +6,11 @@ r"""common.py -- Mininet / SRv6 共享工具
 命令执行,段落标题. 避免各脚本重复实现.
 
 用法:
-    from common import Router, add6, enable_seg6, run_cmd, section, print_topology
+    from lib.common import Router, add6, enable_seg6, run_cmd, section, print_topology
 """
 from mininet.node import Node
 
-from mnlog import detail, summary
+from lib.mnlog import detail, summary
 
 
 class Router(Node):

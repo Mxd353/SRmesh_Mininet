@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""design2_states_mininet.py -- 覆盖 A/B/C/D 四种分支状态的端到端验证
+r"""states_mininet.py -- 覆盖 A/B/C/D 四种分支状态的端到端验证
 ================================================================
 
 用一条链式拓扑放三个 ECMP 点, 每个点的锚点配置不同, 从而在一次运行里同时命中
@@ -24,7 +24,7 @@ Design 2 Phase 2 的四种分支状态:
 
 用法:
 
-    sudo python3 design2_states_mininet.py --test
+    sudo python3 design2/states_mininet.py --test
 """
 import argparse
 import os
@@ -33,7 +33,10 @@ import sys
 import time
 
 if os.geteuid() != 0:
-    sys.exit("需要 root: sudo python3 design2_states_mininet.py --test")
+    sys.exit("需要 root: sudo python3 design2/states_mininet.py --test")
+
+# 脚本在 design2/ 下, 把仓库根加入 sys.path 以便 import lib.* 与 design2.*
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mininet.clean import cleanup
 from mininet.link import TCLink
@@ -41,9 +44,9 @@ from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.node import Node
 
-from common import Router, add6, print_topology, run_cmd, section
-from design2 import choice, infer, link
-from mnlog import attach_file_log, detail, summary
+from lib.common import Router, add6, print_topology, run_cmd, section
+from design2.infer import choice, infer, link
+from lib.mnlog import attach_file_log, detail, summary
 
 # ---- 链路 id 与真值 (netem 单向时延, ms) ----
 E0, X1, X2, X3 = 'e0', 'x1', 'x2', 'x3'
@@ -134,7 +137,7 @@ def main():
     summary(">>>>> log: %s" % logpath)
 
     here = os.path.dirname(os.path.abspath(__file__))
-    oneway = os.path.join(here, "design2_oneway.py")
+    oneway = os.path.join(here, "oneway.py")
 
     cleanup()
     net = Mininet(controller=None, link=TCLink)
