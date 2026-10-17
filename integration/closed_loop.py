@@ -21,10 +21,11 @@ r"""closed_loop.py -- Design 1 + 2 + 3 在 Mininet 上的闭环诊断
 (可见性), 而"每条链路时延都能唯一反解"需要足够的方程; 8 节点 10 链路有 20 条有向
 链路, Step 1 的 11 条探测解不出全部 —— 这是论文两个 Design 的分工, 不是实现缺陷.
 
-用法:
+拓扑来自 integration/fiti.json (41 节点 / 43 链路, 节点用 abbr 命名, weight 当链
+路时延). 用法:
 
     sudo python3 integration/closed_loop.py                    # 真实 Mininet
-    sudo python3 integration/closed_loop.py --fault a2 b2      # 指定注故障的链路
+    sudo python3 integration/closed_loop.py --fault bj tjn     # 指定注故障的链路
     python3 integration/closed_loop.py --simulate              # 链路时延模型, 免 root
 """
 import argparse
@@ -61,11 +62,18 @@ def print_plan_topology(plan, groups):
     """拓扑文字版 + 分区结果 (必须在任何测量之前打印)."""
     section('拓扑与分区 (测量之前)')
     summary('节点 (%d): %s' % (len(plan.nodes), ' '.join(plan.nodes)))
-    summary('链路 (%d): %s' % (len(plan.edges), ', '.join(
-        '%s-%s(%gms)' % (u, v, ms) for u, v, ms in plan.edges)))
+    summary('链路 (%d):' % len(plan.edges))
+    row = []
+    for u, v, ms in plan.edges:
+        row.append('%s-%s(%gms)' % (u, v, ms))
+        if len(row) == 4:
+            summary('  ' + ', '.join(row))
+            row = []
+    if row:
+        summary('  ' + ', '.join(row))
     summary('邻接:')
     for n in plan.nodes:
-        summary('  %-3s -> %s' % (n, ', '.join('%s(%gms)' % (m, plan.nbr[n][m])
+        summary('  %-4s -> %s' % (n, ', '.join('%s(%g)' % (m, plan.nbr[n][m])
                                               for m in plan.neighbors(n))))
     summary('探测端点主机 (%d): %s (探针地址在主机上, 路由器 SID 用 End.DX6 交付)'
             % (len(plan.nodes), ' '.join(plan.host[n] for n in plan.nodes)))
@@ -103,8 +111,8 @@ def main():
     ap = argparse.ArgumentParser(description='Design 1+2+3 闭环诊断')
     ap.add_argument('--simulate', action='store_true',
                     help='用链路时延模型代替真实探测 (免 root, 可复现)')
-    ap.add_argument('--fault', nargs=2, metavar=('U', 'V'), default=('b1', 'b3'),
-                    help='注入故障的链路端点 (默认 b1 b3, 被 3 条计划路径经过)')
+    ap.add_argument('--fault', nargs=2, metavar=('U', 'V'), default=None,
+                    help='注入故障的链路端点 (默认自动选被计划覆盖最多的一条)')
     ap.add_argument('--fault-ms', type=float, default=40.0, help='故障链路额外时延')
     ap.add_argument('--thresh', type=float, default=15.0,
                     help='异常阈值 E (ms): 路径相对基线、链路绝对时延都用它')
@@ -155,6 +163,8 @@ def main():
 
         # ---- 基线: 全互联 + Design 2 反解 ----
         section('基线阶段: 全互联探测 (Design 1) + 链路时延锚点 (Design 2)')
+        summary('[INFO] 基线 %d 条探测 (每条 ~0.2 s, 预计 %.0f 分钟)'
+                % (len(mesh), len(mesh) * 0.2 / 60.0))
         link_ids = sorted(truth)
         obs, base_ow, n_base = [], {}, 0
         for p in mesh:
@@ -204,7 +214,16 @@ def main():
                 % (n_ok, len(probes), r_ok))
 
         # ---- 注入故障 (两端各 +fault_ms, 双向都变慢) ----
-        fu, fv = args.fault
+        if args.fault:
+            fu, fv = args.fault
+        else:
+            cov = {}
+            for p in probes:
+                for lid in p.links:
+                    cov[lid] = cov.get(lid, 0) + 1
+            fu, fv = sorted(max(cov, key=lambda l: (cov[l], l)).split('|'))
+            summary('[INFO] 未指定 --fault, 自动选被计划覆盖最多的链路 %s-%s (%d 条路径)'
+                    % (fu, fv, cov['%s|%s' % (fu, fv)]))
         if fu not in plan.nbr or fv not in plan.nbr[fu]:
             summary('[FAIL] %s-%s 不是拓扑里的链路' % (fu, fv))
             return 1

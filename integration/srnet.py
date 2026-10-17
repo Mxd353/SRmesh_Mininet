@@ -41,6 +41,7 @@ r"""srnet.py -- 闭环集成用的 8 节点 SRv6 网络 (拓扑 + SID 规划 + �
 
 链路时延由 tc netem 注入 (单向 = 发送侧出口), 故障注入 = 把链路两端各调一次.
 """
+import json
 import os
 import random
 import re
@@ -54,15 +55,28 @@ if ROOT not in sys.path:
 from design3.plan import Graph
 from lib.mnlog import detail
 
-# ---- 拓扑: 路由器之间的链路 (u, v, 基准单向时延 ms) ----
-NODES = ('a1', 'a2', 'a3', 'b1', 'b2', 'b3', 'c1', 'c2')
-EDGES = (
-    ('a1', 'a2', 1), ('a2', 'a3', 1), ('a1', 'a3', 1),      # 社区 a
-    ('b1', 'b2', 1), ('b2', 'b3', 1), ('b1', 'b3', 1),      # 社区 b
-    ('c1', 'c2', 1),                                        # 社区 c
-    ('a1', 'b1', 2), ('a2', 'b2', 2), ('b3', 'c1', 2),      # 三条桥
-)
-HOST_SUFFIX = 'h'       # 探测端点主机: a1 -> a1h
+# ---- 拓扑: 从 fiti.json 读 (节点用 abbr, 链路时延 = weight ms) ----
+FITI = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fiti.json')
+
+
+def load_topology(path=FITI):
+    """读 fiti.json, 返回 (nodes, edges); edges 是 (u, v, 基准单向时延 ms).
+
+    节点名用 abbr (bj/sh/xa ...), weight 直接当 netem 时延 (1/2/4 ms).
+    """
+    with open(path, encoding='utf-8') as f:
+        d = json.load(f)
+    abbr = {n['id']: n['abbr'] for n in d['nodes']}
+    nodes = tuple(sorted(abbr[n['id']] for n in d['nodes']))
+    edges = tuple((abbr[l['src']], abbr[l['dst']], float(l['weight']))
+                  for l in d['links'])
+    if len(set(nodes)) != len(nodes):
+        raise ValueError('abbr 有重复, 不能直接当节点名')
+    return nodes, edges
+
+
+NODES, EDGES = load_topology()
+HOST_SUFFIX = 'h'       # 探测端点主机: bj -> bjh
 
 
 class NetPlan(object):
@@ -228,9 +242,22 @@ def build_mininet(plan, port=9999, timeout=3.0, logdir=None):
         raise
 
 
+def _batch(node, cmds):
+    """把多条命令合成一次 shell 调用 (41 节点时每条 cmd 的 mnexec 开销很可观)."""
+    if not cmds:
+        return ''
+    detail('  $ [%s] %d 条命令' % (node.name, len(cmds)))
+    for c in cmds:
+        detail('    %s' % c)
+    out = node.cmd(' ; '.join(cmds))
+    if out.strip():
+        detail('    => %s' % out.strip())
+    return out
+
+
 def _configure(net, plan):
     """配探针主机 / 链路地址 / SRv6 SID 行为 / SID 聚合路由."""
-    from lib.common import add6, enable_seg6, run_cmd
+    from lib.common import add6, enable_seg6
 
     # 端点主机: 探针地址 + 默认路由 (只有一条上行, 不用选路)
     for n in plan.nodes:
@@ -251,23 +278,24 @@ def _configure(net, plan):
                    % (plan.router_host_addr(n), plan.riface[n]))
         net[n].cmd('ip link set %s up' % plan.riface[n])
 
-    # SID 行为: 端点 SID 用 End.DX6 交付给主机, 邻接 SID 用 End.X 逐跳钉死
+    # SID 行为 + 聚合路由: 每个路由器一次批量装完, 再校验条数
     for n in plan.nodes:
-        run_cmd(net[n], 'ip -6 route add %s/128 encap seg6local action End.DX6 '
-                'nh6 %s dev %s'
-                % (plan.node_sid(n), plan.probe_addr(n), plan.riface[n]))
+        node = net[n]
+        cmds = ['ip -6 route add %s/128 encap seg6local action End.DX6 nh6 %s dev %s'
+                % (plan.node_sid(n), plan.probe_addr(n), plan.riface[n])]
         for peer in plan.neighbors(n):
-            run_cmd(net[n], 'ip -6 route add %s/128 encap seg6local action End.X '
-                    'nh6 %s dev %s'
-                    % (plan.adj_sid(n, peer), plan.addr(peer, n),
-                       plan.iface_of(n, peer)))
-
-    # SID 聚合路由: 每个路由器到其他节点的 SID 前缀都有一条下一跳
-    for n in plan.nodes:
+            cmds.append('ip -6 route add %s/128 encap seg6local action End.X nh6 %s '
+                        'dev %s' % (plan.adj_sid(n, peer), plan.addr(peer, n),
+                                    plan.iface_of(n, peer)))
         for dst, hop in plan.hop[n].items():
-            run_cmd(net[n], 'ip -6 route add %s via %s dev %s'
-                    % (plan.sid_prefix(dst), plan.addr(hop, n),
-                       plan.iface_of(n, hop)))
+            cmds.append('ip -6 route add %s via %s dev %s'
+                        % (plan.sid_prefix(dst), plan.addr(hop, n),
+                           plan.iface_of(n, hop)))
+        _batch(node, cmds)
+        want = len(cmds)
+        got = node.cmd('ip -6 route show | grep -c "2001:db8:100:"').strip()
+        if got != str(want):
+            raise RuntimeError('%s 的 SID 路由只装上 %s/%d 条' % (n, got, want))
 
 
 def _macs(net, plan):
@@ -283,16 +311,11 @@ def warmup(net, plan):
     多出约 80 ms (详见 design1/demo.py 的关键坑第 8 条). 闭环里任意节点对都可能
     被探, 所以每条链路都要预热 —— 也顺带把 SID 聚合路由的下一跳解析出来.
     """
-    for (u, v), (au, av) in plan.link.items():
-        net[u].cmd('ping6 -c 2 -i 0.2 -W 1 -I %s %s >/dev/null 2>&1'
-                   % (plan.iface_of(u, v), av))
-        net[v].cmd('ping6 -c 2 -i 0.2 -W 1 -I %s %s >/dev/null 2>&1'
-                   % (plan.iface_of(v, u), au))
+    ping = 'ping6 -c 1 -i 0.2 -W 1 %s >/dev/null 2>&1'
     for n in plan.nodes:
-        net[plan.host[n]].cmd('ping6 -c 2 -i 0.2 -W 1 %s >/dev/null 2>&1'
-                              % plan.router_host_addr(n))
-        net[n].cmd('ping6 -c 2 -i 0.2 -W 1 %s >/dev/null 2>&1'
-                   % plan.probe_addr(n))
+        _batch(net[n], [ping % plan.addr(v, n) for v in plan.neighbors(n)]
+               + [ping % plan.probe_addr(n)])
+        _batch(net[plan.host[n]], [ping % plan.router_host_addr(n)])
 
 
 class ProbeExecutor(object):
