@@ -34,7 +34,12 @@ def attach_file_log(script, logfile=None):
         logfile = os.path.join(
             d, '%s_%s.log' % (script, time.strftime('%Y%m%d_%H%M%S')))
 
-    fh = logging.FileHandler(logfile, mode='w', encoding='utf-8')
+    try:
+        fh = logging.FileHandler(logfile, mode='w', encoding='utf-8')
+    except OSError as e:
+        # 例如 logs/ 被 root 拥有而当前是普通用户: 降级为只输出到终端
+        print('[mnlog] 无法写日志文件 %s: %s (只输出到终端)' % (logfile, e))
+        return None
     fh.setFormatter(logging.Formatter('%(message)s'))
     fh.setLevel(logging.DEBUG)      # 由 logger 自身 level 过滤
     lg.addHandler(fh)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""eval.py -- Design 3 三层剪枝的离线评测 (合成拓扑, 免 root)
+r"""eval.py -- Design 3 三层剪枝的离线评测
 ================================================================
 
 用合成拓扑复现论文 Table III 的分阶段削减量级:
@@ -247,14 +247,14 @@ def eval_topology(name, gen, desc, args, seed):
 # ---- 输出 ----
 def _head():
     print('')
-    print('  %-13s %4s %4s %7s | %6s %6s | %7s %6s | %8s %6s | %7s %5s %4s %4s %7s'
+    print('  %-12s%s %3s %4s | %6s %4s | %7s %4s |%8s %4s | %4s %3s %2s %2s %s'
           % ('拓扑', '节点', '边', '全互联',
              'Step1', '削减1', 'Step1+2', '削减2', 'Step1+2+3', '削减3',
              '总削减', '轮数', '漏探', '漏检', '候选/故障'))
 
 
 def _row(r):
-    print('  %-13s %4d %4d %7d | %6.1f %5.1f%% | %7.1f %5.1f%% | %8.1f %5.1f%% | %6.1f%% %5.2f %4d %4d %6.2fx'
+    print('  %-13s %4d %4d %7d | %6.1f %5.1f%% | %7.1f %5.1f%% | %8.1f %5.1f%% | %6.1f%% %5.2f %4d %4d %8.2fx'
           % (r['name'], r['nodes'], r['edges'], r['baseline'],
              r['step1'], r['r1'], r['step2'], r['r2'], r['step3'], r['r3'],
              r['rt'], r['rounds'], r['hidden'], r['missed'], r['loc_ratio']))
