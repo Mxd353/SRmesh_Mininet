@@ -6,7 +6,7 @@ r"""common.py -- Mininet / SRv6 共享工具
 命令执行,段落标题. 避免各脚本重复实现.
 
 用法:
-    from common import Router, add6, enable_seg6, run_cmd, section
+    from common import Router, add6, enable_seg6, run_cmd, section, print_topology
 """
 from mininet.node import Node
 
@@ -51,3 +51,46 @@ def run_cmd(node, cmd):
     if out.strip():
         detail("    %s" % out.strip().replace("\n", "\n    "))
     return out
+
+
+# 拓扑打印时展示的链路参数键 (按顺序)
+_TOPO_PARAM_KEYS = ('delay', 'jitter', 'loss', 'bw', 'max_queue_size')
+
+
+def _link_param_text(intf):
+    """从接口 params 里取出链路的展示参数文本 (delay=5ms, bw=10mbit ...)."""
+    params = getattr(intf, 'params', None) or {}
+    return ', '.join('%s=%s' % (k, params[k]) for k in _TOPO_PARAM_KEYS
+                     if params.get(k) is not None)
+
+
+def print_topology(net, title='拓扑'):
+    """打印当前拓扑: 节点清单 + 链路表 + 邻接表.
+
+    一般在地址/路由配置完成之后, 开始测量之前调用. 直接读 Link 的接口名, 以及
+    接口 params(getattr(intf, 'params')) 里的链路参数 (delay / bw / loss 等) 来展示.
+    """
+    hosts = list(net.hosts)
+    links = list(net.links)
+
+    section(title)
+    summary('节点 (%d): %s'
+            % (len(hosts), ' '.join(sorted(n.name for n in hosts))))
+
+    summary('链路 (%d):' % len(links))
+    adj = {}
+    for lk in links:
+        param = _link_param_text(lk.intf1) or _link_param_text(lk.intf2)
+        tail = ('  (%s)' % param) if param else ''
+        summary('  %-14s <-> %-14s%s'
+                % (lk.intf1.name, lk.intf2.name, tail))
+        # Link 不保存 node1/node2, 节点名从接口的 .node 取
+        n1, n2 = lk.intf1.node.name, lk.intf2.node.name
+        adj.setdefault(n1, []).append((n2, param))
+        adj.setdefault(n2, []).append((n1, param))
+
+    summary('邻接:')
+    for name in sorted(adj):
+        peers = ', '.join('%s%s' % (n, ('[%s]' % p) if p else '')
+                          for n, p in sorted(adj[name]))
+        summary('  %-6s -> %s' % (name, peers))

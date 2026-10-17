@@ -28,7 +28,7 @@ import numpy as np
 def nnls(A, b, max_iter=None, tol=1e-12):
     """非负最小二乘 min ||Ax - b||_2, s.t. x >= 0 (Lawson-Hanson).
 
-    论文代码用 scipy.optimize.nnls; 这里用 numpy 手写等价实现, 避免依赖 scipy.
+    numpy 手写 Lawson-Hanson 迭代, 避免引入 scipy 依赖.
     """
     A = np.asarray(A, dtype=np.float64)
     b = np.asarray(b, dtype=np.float64).reshape(-1)
@@ -92,13 +92,14 @@ def expand(segments):
 
 
 # ---- 推断 ----
-def infer(link_ids, observations, epsilon=10.0, max_iters=30):
+def infer(link_ids, observations, epsilon=10.0, max_iters=30, trace=None):
     """推断每条链路的时延.
 
     link_ids:      所有链路的 id 列表
     observations:  [(delay, segments), ...]
     epsilon:       歧义分支的可区分阈值 (论文建议取网络时延经验标准差)
     max_iters:     消元/解析的迭代上限
+    trace:         可选 list, 记录每次歧义解析的分支状态 (A/B/C/D), 供诊断用.
 
     返回 dict: link_id -> 时延
     """
@@ -106,7 +107,7 @@ def infer(link_ids, observations, epsilon=10.0, max_iters=30):
     resolved = []          # 已解析出分支的确定路径 (delay, [ids])
     resolved_keys = set()
 
-    for _ in range(max_iters):
+    for it in range(max_iters):
         changed = False
 
         # ---- Phase 1: 确定性观测 -> nnls (论文: 代数消元拿锚点) ----
@@ -155,7 +156,15 @@ def infer(link_ids, observations, epsilon=10.0, max_iters=30):
             scored.sort(key=lambda x: x[0])
             best_err, combo, unk, residual = scored[0]
             # 唯一性: 次优误差需比最优明显更大(> epsilon)
-            if len(scored) > 1 and scored[1][0] - best_err <= epsilon:
+            tie = len(scored) > 1 and scored[1][0] - best_err <= epsilon
+            if trace is not None:
+                # A 全已知 / C 单未知 / D 多未知 / B 不可辨识(次优并列)
+                trace.append({'iter': it, 'delay': d,
+                              'state': 'B' if tie else
+                                       ('A' if len(unk) == 0 else
+                                        ('C' if len(unk) == 1 else 'D')),
+                              'unk': list(unk)})
+            if tie:
                 continue
             if len(unk) == 1 and residual >= 0:
                 l = unk[0]
@@ -181,106 +190,7 @@ def infer(link_ids, observations, epsilon=10.0, max_iters=30):
     return links
 
 
-# ---- 作者算法 ----
-def author_infer(observations, epsilon=10.0):
-    """复现作者 greedy_grouped_inference (目标 = 最少异常链路, 工程版).
-
-    与论文式(1) 的差异: 求解用 nnls(非代数消元), 目标 = abnormal*100 +
-    very_high*200 + error(非最小化总绝对偏差), epsilon 硬编码(此处参数化).
-
-    注意: 作者原始代码初始化 link_delays = zeros, 未先用确定性约束解出锚点,
-    导致首轮迭代 estimates 全 0, 无法区分 ECMP 分支, delay 较小的歧义观测被
-    错误解析. 这里修复为先用确定性约束求解锚点, 使对照聚焦于目标函数本身.
-    """
-    constraints = [{'paths': expand(segs), 'delay': d} for d, segs in observations]
-    deterministic = []
-    uncertain = []
-    for c in constraints:
-        if len(c['paths']) == 1:
-            c['selected'] = 0
-            deterministic.append(c)
-        else:
-            uncertain.append(c)
-
-    all_links = sorted({l for c in constraints for p in c['paths'] for l in p})
-    link_index = {l: i for i, l in enumerate(all_links)}
-    n = len(all_links)
-
-    def solve(det):
-        if not det:
-            return np.zeros(n)
-        A = np.zeros((len(det), n))
-        b = np.zeros(len(det))
-        for i, c in enumerate(det):
-            for l in c['paths'][c['selected']]:
-                A[i, link_index[l]] = 1
-            b[i] = c['delay']
-        return nnls(A, b)
-
-    # 修复: 先用确定性约束解出锚点, 而非作者原版的 zeros 初始化
-    link_delays = solve(deterministic)
-
-    updated = True
-    while updated:
-        updated = False
-        new_det = []
-        for c in uncertain:
-            if 'selected' in c:
-                continue
-            estimates = [sum(link_delays[link_index[l]] for l in p) for p in c['paths']]
-            groups = []
-            for idx, val in enumerate(estimates):
-                placed = False
-                for g in groups:
-                    if abs(val - g['rep']) <= epsilon:
-                        g['indices'].append(idx)
-                        g['rep'] = np.mean([estimates[i] for i in g['indices']])
-                        placed = True
-                        break
-                if not placed:
-                    groups.append({'indices': [idx], 'rep': val})
-            best_group, best_score = None, float('inf')
-            for g in groups:
-                error = abs(c['delay'] - g['rep'])
-                if error <= epsilon * 2:
-                    test_path = c['paths'][g['indices'][0]]
-                    temp = deterministic + [{'paths': [test_path], 'delay': c['delay'], 'selected': 0}]
-                    x = solve(temp)
-                    pos = x[x > 0]
-                    avg = float(np.mean(pos)) if pos.size else 10.0
-                    thr = max(avg * 2, 30.0)
-                    score = float(np.sum(x > thr)) * 100.0 + float(np.sum(x > 100.0)) * 200.0 + error
-                    if score < best_score:
-                        best_score, best_group = score, g
-            if best_group is not None:
-                c['selected'] = best_group['indices'][0]
-                updated = True
-                new_det.append(c)
-            else:
-                mine = min(groups, key=lambda g: abs(c['delay'] - g['rep']))
-                if abs(c['delay'] - mine['rep']) <= epsilon * 3:
-                    c['selected'] = mine['indices'][0]
-                    updated = True
-                    new_det.append(c)
-        if new_det:
-            deterministic.extend(new_det)
-            link_delays = solve(deterministic)
-
-    for c in uncertain:
-        if 'selected' in c:
-            continue
-        estimates = [sum(link_delays[link_index[l]] for l in p) for p in c['paths']]
-        mean_val = float(np.mean(estimates))
-        if abs(c['delay'] - mean_val) <= epsilon:
-            c['selected'] = int(min(range(len(estimates)), key=lambda i: abs(estimates[i] - mean_val)))
-        else:
-            c['selected'] = int(min(range(len(estimates)), key=lambda i: abs(estimates[i] - c['delay'])))
-
-    link_delays = solve(constraints)
-    return {l: float(link_delays[link_index[l]]) for l in all_links}
-
-
-# ---- 对照实验 ----
+# ---- 合成场景评估 ----
 def _mae(links, truth):
     return float(np.mean([abs(links[l] - truth[l]) for l in truth]))
 
@@ -290,7 +200,7 @@ def _section(title):
 
 
 def _bottleneck_report(links, truth, threshold=50.0):
-    """按真值判定瓶颈链路, 看两算法是否检出/误报."""
+    """按真值判定瓶颈链路, 看算法是否检出/误报."""
     gt = {l for l, v in truth.items() if v > threshold}
     pred = {l for l, v in links.items() if v > threshold}
     tp = gt & pred
@@ -302,8 +212,8 @@ def _bottleneck_report(links, truth, threshold=50.0):
         ('X' + str(sorted(fp))) if fp else '无')
 
 
-def compare():
-    """同一组观测, 对照两个算法的链路推断与瓶颈定位."""
+def run_scenarios():
+    """在若干合成场景上跑推断, 报告链路推断误差与瓶颈定位."""
     TH = 50.0
     scenarios = [
         # (名称, 链路列表, 真值, 观测, 瓶颈链路)
@@ -332,15 +242,13 @@ def compare():
     ]
 
     for name, link_ids, truth, obs, bn in scenarios:
-        mine = infer(link_ids, obs, epsilon=10.0)
-        author = author_infer(obs, epsilon=10.0)
+        inferred = infer(link_ids, obs, epsilon=10.0)
         _section(name)
         print('  真值瓶颈: %s' % bn)
         for l in link_ids:
-            print('  %-4s 真值=%5.1f  |  论文式(我)=%6.2f  |  作者(最少异常)=%6.2f'
-                  % (l, truth[l], mine[l], author[l]))
-        print('  论文式 MAE=%.2f  瓶颈[%s]' % (_mae(mine, truth), _bottleneck_report(mine, truth, TH)))
-        print('  作者式 MAE=%.2f  瓶颈[%s]' % (_mae(author, truth), _bottleneck_report(author, truth, TH)))
+            print('  %-4s 真值=%5.1f  |  推断=%6.2f' % (l, truth[l], inferred[l]))
+        print('  MAE=%.2f  瓶颈[%s]'
+              % (_mae(inferred, truth), _bottleneck_report(inferred, truth, TH)))
 
 
 # ---- 测试 ----
@@ -404,4 +312,4 @@ if __name__ == '__main__':
     test_paper_example()
     test_disambiguation()
     test_unidentifiable()
-    compare()
+    run_scenarios()

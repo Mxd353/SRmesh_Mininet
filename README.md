@@ -3,7 +3,7 @@
 在 **WSL2 + Mininet** 上复现论文 *SRmesh: Deterministic and Efficient Diagnosis of
 Latency Bottleneck Links in SRv6 Networks*（**ICNP 2025, CCF-B**）的核心设计。
 全部跑在真实 Linux 数据面上（内核 SRv6 / IPv6 ECMP / netem），不依赖模拟器；
-作者算法在本仓**重实现**为对照基线，不复用其源码。
+算法在本仓**独立实现**，不复用作者源码。
 
 复现内容分两部分：
 
@@ -18,14 +18,15 @@ Latency Bottleneck Links in SRv6 Networks*（**ICNP 2025, CCF-B**）的核心设
 
 | 文件 | 作用 |
 | --- | --- |
-| `common.py` | 共享 Mininet/SRv6 工具：`Router`、`add6`、`enable_seg6`、`run_cmd`、`section` |
+| `common.py` | 共享 Mininet/SRv6 工具：`Router`、`add6`、`enable_seg6`、`run_cmd`、`section`、`print_topology` |
 | `mnlog.py` | 日志落盘（Mininet 的 info 输出走 stderr，直接重定向会丢） |
 | `design1_demo.py` | Design 1 编排：钻石拓扑 + SID 行为（End.X/End.DX6）+ 按模式启动探测/响应 |
 | `design1_probe.py` | Design 1 的**发起端 + 用户态响应端**（3 个子命令，见下） |
 | `design1_responder.bpf.c` | Design 1 的**内核态** TC eBPF 响应端（`bpf_skb_adjust_room` 扩包 + 构造 SRH + `bpf_redirect`） |
-| `design2.py` | Design 2 推断算法（论文式 1–4 + Algorithm 1），附作者实现的对照版与内置自测 |
+| `design2.py` | Design 2 推断算法（论文式 1–4 + Algorithm 1），附内置自测与合成场景评估 |
 | `design2_mininet.py` | Design 2 端到端：单 ECMP 点，netem 真值 + IPv6 ECMP 观测 + SRv6 定向观测 |
 | `design2_ambiguous_mininet.py` | Design 2 端到端：两个 ECMP 点串联，理论 4 种路径组合 |
+| `design2_states_mininet.py` | Design 2 端到端：三个 ECMP 点，一次运行覆盖 A/B/C/D 四种分支状态 |
 | `design2_oneway.py` | 单向 UDP 时间戳探测工具（避免 ping RTT/2 被非对称回程污染） |
 
 运行产物：`logs/` 存放每次 Mininet 脚本的完整日志；`design1_responder.bpf.o` 与
@@ -105,10 +106,6 @@ SR 把路径钉到 SID 粒度，但 SID 对之间仍有 ECMP。观测到端到�
 3. **迭代**：以上两步交替，直到不再变化。
 4. **均值兜底**：仍未知的链路取已知链路均值。
 
-`design2.py` 另含 `author_infer`（重实现作者 `greedy_grouped_inference`，目标 =
-最少异常链路）作对照。作者原版以 `link_delays = zeros` 初始化、未先解锚点，本仓
-修复为「先用确定性约束求锚点」，使对照聚焦于目标函数本身。
-
 ### Mininet 端到端验证
 
 - `design2_mininet.py`：拓扑 `S--M--Q--T`，r1→h2 按 flow hash 做 ECMP（直连 x2 或
@@ -116,9 +113,27 @@ SR 把路径钉到 SID 粒度，但 SID 对之间仍有 ECMP。观测到端到�
   并用不同源地址触发不同 ECMP 分支。
 - `design2_ambiguous_mininet.py`：两个 ECMP 点串联，h1→h2 理论 2×2 = 4 种路径组合，
   用 32 个单向样本聚成代表时延喂给推断算法。
+- `design2_states_mininet.py`：链式三个 ECMP 点，锚点配置各不相同，一次运行同时覆盖
+  Phase 2 的四种分支状态。
 
 > 输入**只**包含测量值，不把样本的真实分支标签泄漏给算法：歧义观测统一表示为同一
 > 条 `choice` 约束，分支归属完全由推断算法反解。
+
+### Phase 2 分支状态（`infer(trace=...)`）
+
+对一条含 ECMP 歧义的观测，Phase 2 对每个候选分支算 `(known_sum, unk, residual, err)`，
+取 `err` 最小者；若次优与最优之差 ≤ `epsilon` 判为不可辨识。`infer` 的 `trace`
+参数记录每次解析落在哪一类：
+
+| 分支状态 | 判据 | 是否产生新信息 |
+| --- | --- | --- |
+| A 全已知 | `unk = 0` | 否，幂等空转（仅确认分支归属） |
+| C 单未知 | `unk = 1` | 是，反解该链路 = residual |
+| D 多未知 | `unk ≥ 2` | 部分，只能给“和”，不落具体链路 |
+| B 两分支都无锚点 | 次优 err − 最优 err ≤ `epsilon` | 否，不可辨识，跳过 |
+
+`design2_states_mininet.py` 三个 ECMP 点的锚点配置分别对应 A+C、D、B，一次运行即可
+全部命中（终端与日志会打印覆盖报告）。
 
 ---
 
@@ -130,39 +145,47 @@ sudo python3 design1_demo.py --capture          # 用户态响应端
 sudo python3 design1_demo.py --ebpf --capture   # 内核态 eBPF 响应端（需 bpftool + libbpf-dev + clang）
 
 # --- Design 2 ---
-python3 design2.py                              # 算法自测 + 作者对照（无需 root）
+python3 design2.py                              # 算法自测 + 合成场景（无需 root）
 sudo python3 design2_mininet.py --test          # 单 ECMP 点：Mininet + netem 真值
 sudo python3 design2_ambiguous_mininet.py --test # 两个 ECMP 点（4 种路径组合）
+sudo python3 design2_states_mininet.py --test   # 三个 ECMP 点：覆盖 A/B/C/D 四种分支状态
 ```
 
 `design1_demo.py --ebpf` 会**自动**：读取 MAC/ifindex 生成 `design1_responder_cfg.h`
 → clang 编译 → `tc filter add` 挂到 `h2-eth0` ingress。所有 Mininet 脚本都会把终端
-输出同时写入 `logs/<脚本名>_<时间戳>.log`。
+输出同时写入 `logs/<脚本名>_<时间戳>.log`，并在**开始测量前**打印一份文字拓扑
+（`print_topology`：节点清单 + 链路表 + 邻接表）：
+
+```
+sudo python3 design2_states_mininet.py --test
+# 终端: == 拓扑 == 节点/链路/邻接表
+```
 
 ---
 
 ## 结果
 
-### 算法层对照（`python3 design2.py`，确定性、可复现）
+### 算法层自测（`python3 design2.py`，确定性、可复现）
 
-| 场景 | 论文式 MAE | 作者式 MAE | 瓶颈定位 |
-| --- | ---: | ---: | --- |
-| 论文数值例子（无噪） | 0.00 | 0.00 | 均检出 x2 |
-| 菱形 ECMP（歧义指向瓶颈） | 1.25 | 11.25 | 均检出 AT |
-| 菱形 ECMP + 噪声 | 2.00 | 8.75 | 均检出 AT |
+| 场景 | MAE | 瓶颈定位 |
+| --- | ---: | --- |
+| 论文数值例子（无噪） | 0.00 | 检出 x2 |
+| 菱形 ECMP（歧义指向瓶颈） | 1.25 | 检出 AT |
+| 菱形 ECMP + 噪声 | 2.00 | 检出 AT |
 
 内置自测：论文数值例子全部正确；歧义反解正确（观测偏离锚点 → 反解未知分支）；
-不可辨识场景按预期走均值兜底（推断 5，真值 7，属设计内偏差）。可见在**无噪**时
-两算法等价，一旦引入 ECMP 歧义与噪声，论文式目标（最小化总偏差）明显优于作者式
-（最少异常链路）。
+不可辨识场景按预期走均值兜底（推断 5，真值 7，属设计内偏差）。
 
 ### Mininet 端到端（`logs/` 实测）
 
-**单 ECMP 点**：MAE 论文式 0.069–0.119 ms、作者式 0.079–2.019 ms；瓶颈 x2 均正确
-检出。SRv6 定向观测实测 40.2–40.4 ms（理论 40 ms）。作者式在不同轮次波动较大。
+**单 ECMP 点**：MAE 0.069–0.119 ms；瓶颈 x2 正确检出。SRv6 定向观测实测
+40.2–40.4 ms（理论 40 ms）。
 
-**两个 ECMP 点**：9 条链路全部推断到真值附近，MAE 论文式/作者式均 ≈ 0.10 ms；
-瓶颈 x2 检出（x6 = 20 ms 处于阈值边缘，属阈值选择问题）。
+**两个 ECMP 点**：9 条链路全部推断到真值附近，MAE ≈ 0.10 ms；瓶颈 x2 检出
+（x6 = 20 ms 处于阈值边缘，属阈值选择问题）。
+
+**分支状态覆盖**（`design2_states_mininet.py`）：一次运行命中 A/B/C/D 全部四种；
+其中只有 C 会反解出未锚定链路（x3），D/B 信息不足，按设计走均值兜底。
 
 > 说明：Mininet 场景里每条链路都有确定性观测直接测出，端到端 ECMP 样本主要用于
 > **一致性校验**（验证歧义观测与已解链路自洽），而非在完全盲的条件下定位瓶颈。

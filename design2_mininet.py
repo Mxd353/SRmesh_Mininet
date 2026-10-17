@@ -11,8 +11,7 @@ r"""design2_mininet.py -- SRmesh Design 2 + Mininet 端到端验证
 
 r1 到 h2::2 使用 Linux IPv6 multipath route, 在 x2 和 x3+x4 之间按 flow label 做
 ECMP. 确定性链路观测使用点到点地址; 歧义观测使用不同 IPv6 flow label 的 h1->h2
-探测. 最后把实际时延转成 Design 2 的 Observation, 分别运行论文式推断和作者
-greedy_grouped_inference.
+探测. 最后把实际时延转成 Design 2 的 Observation, 运行论文式推断.
 
 用法:
 
@@ -34,9 +33,9 @@ from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.node import Node
 
-from design2 import author_infer, choice, infer, link
+from design2 import choice, infer, link
 from mnlog import attach_file_log, detail, summary
-from common import Router, add6, enable_seg6, run_cmd as run, section
+from common import Router, add6, enable_seg6, print_topology, run_cmd as run, section
 
 
 X1, X2, X3, X4, X5 = "x1", "x2", "x3", "x4", "x5"
@@ -180,6 +179,7 @@ def main():
     run(h1, "ip -6 route add %s/128 encap seg6 mode encap segs %s dev h1-eth0"
         % (H2_SR, r3_sid))
 
+    print_topology(net, '拓扑 (单 ECMP 点: h1-x1-r1-(x2|x3+x4)-r3-x5-h2)')
     section("采集确定性链路观测(RTT/2)")
     measured = {}
     for name, node, dst in ((X1, h1, R1_H), (X2, r1, R3_R1),
@@ -222,21 +222,17 @@ def main():
     observations = fixed + ambiguous
 
     section("Design 2 推断(epsilon=%.2fms)" % args.epsilon)
-    ours = infer([X1, X2, X3, X4, X5], observations, epsilon=args.epsilon)
-    author = author_infer(observations, epsilon=args.epsilon)
+    estimated = infer([X1, X2, X3, X4, X5], observations, epsilon=args.epsilon)
     for name in (X1, X2, X3, X4, X5):
-        summary("[RESULT] %-2s: truth = %6.2f ms, measured = %6.2f ms, ours = %6.2f ms, author = %6.2f ms" %
-                (name, TRUTH[name], measured[name], ours[name], author[name]))
+        summary("[RESULT] %-2s: truth = %6.2f ms, measured = %6.2f ms, infer = %6.2f ms" %
+                (name, TRUTH[name], measured[name], estimated[name]))
 
-    mae_ours = sum(abs(ours[x] - TRUTH[x]) for x in TRUTH) / len(TRUTH)
-    mae_author = sum(abs(author[x] - TRUTH[x]) for x in TRUTH) / len(TRUTH)
-    summary("[RESULT] MAE: ours = %.3f ms, author = %.3f ms" %
-            (mae_ours, mae_author))
+    mae = sum(abs(estimated[x] - TRUTH[x]) for x in TRUTH) / len(TRUTH)
+    summary("[RESULT] MAE = %.3f ms" % mae)
     bottleneck = [x for x in TRUTH if TRUTH[x] > 20]
-    pred_ours = [x for x in TRUTH if ours[x] > 20]
-    pred_author = [x for x in TRUTH if author[x] > 20]
-    summary("[RESULT] bottleneck: truth = %s, ours = %s, author = %s" %
-            (bottleneck, pred_ours, pred_author))
+    pred = [x for x in TRUTH if estimated[x] > 20]
+    summary("[RESULT] bottleneck: truth = %s, infer = %s" %
+            (bottleneck, pred))
 
     section("完成")
     net.stop()

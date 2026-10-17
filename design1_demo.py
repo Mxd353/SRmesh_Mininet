@@ -32,11 +32,10 @@ from mininet.net import Mininet
 from mininet.node import Node
 from mininet.link import TCLink
 from mininet.log import setLogLevel
-from mininet.cli import CLI
 from mininet.clean import cleanup
 
 from mnlog import attach_file_log, detail, summary
-from common import Router, add6, enable_seg6, run_cmd as run, section
+from common import Router, add6, enable_seg6, print_topology, run_cmd as run, section
 
 # ---- 地址 ----
 H1_ADDR = '2001:db8:1::2/64'
@@ -165,6 +164,7 @@ def main():
     r4_mac = r4.cmd('cat /sys/class/net/r4-eth3/address').strip()
     detail('  h2-eth0 MAC = %s, r4-eth3 MAC = %s' % (h2_mac, r4_mac))
 
+    print_topology(net, '拓扑 (钻石: h1-r1-(r2|r3)-r4-h2)')
     if args.ebpf:
         section('生成 eBPF 配置头并编译')
         cfg_path = os.path.join(here, 'design1_responder_cfg.h')

@@ -1,6 +1,10 @@
 # 运行时日志 (不提交)
 logs/
 
+# 本地拓扑图与绘图脚本 (不提交)
+topo/
+topo_viz.py
+
 # Python 缓存
 __pycache__/
 *.pyc

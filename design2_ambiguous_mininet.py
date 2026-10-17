@@ -35,8 +35,8 @@ from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.node import Node
 
-from common import Router, add6, run_cmd, section
-from design2 import author_infer, choice, infer, link
+from common import Router, add6, print_topology, run_cmd, section
+from design2 import choice, infer, link
 from mnlog import attach_file_log, detail, summary
 
 # ---- 链路 id ----
@@ -181,6 +181,7 @@ def main():
            "nexthop via %s dev r4-eth3" % (H2, R6_R4, R5_R4))
     run_cmd(r5, "ip -6 route add %s/128 via %s dev r5-eth2" % (H2, R6_R5))
 
+    print_topology(net, '拓扑 (两个 ECMP 点串联)')
     section("采集确定性链路观测 (RTT/2)")
     measured = {}
     for name, node, dst in (
@@ -218,20 +219,18 @@ def main():
     for d in reps:
         observations.append((d, e2e_segs))
 
-    ours = infer(X, observations, epsilon=args.epsilon)
-    author = author_infer(observations, epsilon=args.epsilon)
+    estimated = infer(X, observations, epsilon=args.epsilon)
 
     def mae(r):
         return sum(abs(r[l] - TRUTH[l]) for l in TRUTH) / len(TRUTH)
 
     for l in X:
-        summary("[RESULT] %-3s: truth = %5.1f ms, measured = %5.2f ms, "
-                "ours = %5.2f ms, author = %5.2f ms"
-                % (l, TRUTH[l], measured[l], ours[l], author[l]))
-    summary("[RESULT] MAE: ours = %.2f ms, author = %.2f ms" % (mae(ours), mae(author)))
+        summary("[RESULT] %-3s: truth = %5.1f ms, measured = %5.2f ms, infer = %5.2f ms"
+                % (l, TRUTH[l], measured[l], estimated[l]))
+    summary("[RESULT] MAE = %.2f ms" % mae(estimated))
     bn = [l for l in TRUTH if TRUTH[l] > 20]
-    summary("[RESULT] bottleneck: truth = %s, ours = %s, author = %s"
-            % (bn, [l for l in TRUTH if ours[l] > 20], [l for l in TRUTH if author[l] > 20]))
+    summary("[RESULT] bottleneck: truth = %s, infer = %s"
+            % (bn, [l for l in TRUTH if estimated[l] > 20]))
 
     section("完成")
     net.stop()
