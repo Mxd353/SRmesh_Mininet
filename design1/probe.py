@@ -128,16 +128,23 @@ def parse_reply_ts(data):
 
 
 # ---- 发起端 ----
+def _route_cmd(dst, segs, dev):
+    """拼 encap seg6 路由命令; segs 可以是有序列表, 也可以是逗号分隔的字符串."""
+    if isinstance(segs, str):
+        segs = [s for s in segs.split(',') if s]
+    cmd = ['ip', '-6', 'route', 'replace', '%s/128' % dst,
+           'encap', 'seg6', 'mode', 'encap', 'segs', ','.join(segs)]
+    if dev:
+        cmd += ['dev', dev]
+    return cmd
+
+
 def _set_encap_route(dst, segs, dev):
     """给目的地址装一条 encap seg6 的 /128 路由 (正向路径 = 这条 SID 列表).
 
     同一目的地址可能被不同探测对复用 (不同路径), 所以每探一次用 replace 覆盖.
     """
-    cmd = ['ip', '-6', 'route', 'replace', '%s/128' % dst,
-           'encap', 'seg6', 'mode', 'encap', 'segs', ','.join(segs)]
-    if dev:
-        cmd += ['dev', dev]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(_route_cmd(dst, segs, dev), capture_output=True, text=True)
     if r.returncode != 0:
         return (r.stderr or r.stdout).strip() or 'ip route replace 失败'
     return None
@@ -354,9 +361,47 @@ def cmd_respond(args):
     return 0
 
 
+# ---- 离线自测 (不需要 root, 不碰网络) ----
+def selftest():
+    """线格式 / 回复时间戳 / SID 列表拼装 / SRH 段序."""
+    print('\n== probe.py 自测 ==')
+    ok = True
+
+    pl = make_payload(7, 3, 123456789,
+                      ['2001:db8:100::2', '2001:db8:100::4'])
+    back = parse_payload(pl)
+    good = back == (7, 3, 123456789, ['2001:db8:100::2', '2001:db8:100::4'])
+    print('  线格式往返: %s' % ('OK' if good else 'X %r' % (back,)))
+    ok = ok and good
+
+    ts = parse_reply_ts(make_payload(7, 3, 1, []) + TS.pack(987654321))
+    good = ts == 987654321
+    print('  回复时间戳: %s' % ('OK' if good else 'X %r' % (ts,)))
+    ok = ok and good
+
+    # 字符串 / 列表两种入参必须等价, 且绝不能按字符拆开
+    a = _route_cmd('2001:db8:ff::2', '2001:db8:100:2::ff', 'x-eth0')
+    b = _route_cmd('2001:db8:ff::2', ['2001:db8:100:2::ff'], 'x-eth0')
+    got = a[a.index('segs') + 1]
+    good = (a == b and got == '2001:db8:100:2::ff')
+    print('  SID 列表拼装: %s' % ('OK' if good else 'X %r' % (got,)))
+    ok = ok and good
+
+    h = srh(['2001:db8:100::2', '2001:db8:100::4'])
+    segs = [r6(h[8 + 16 * i:8 + 16 * (i + 1)]) for i in range(2)]
+    good = segs == ['2001:db8:100::4', '2001:db8:100::2']
+    print('  SRH 逆序存放: %s' % ('OK' if good else 'X %r' % (segs,)))
+    ok = ok and good
+
+    print('  [RESULT] probe.py 自测: %s' % ('通过' if ok else '失败'))
+    return 0 if ok else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest='mode', required=True)
+
+    sub.add_parser('selftest').set_defaults(func=lambda a: selftest())
 
     p = sub.add_parser('probe')
     p.add_argument('--dst', required=True)
