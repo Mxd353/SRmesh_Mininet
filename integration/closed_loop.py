@@ -31,6 +31,7 @@ import argparse
 import itertools
 import os
 import sys
+import time
 
 import numpy as np
 
@@ -66,6 +67,8 @@ def print_plan_topology(plan, groups):
     for n in plan.nodes:
         summary('  %-3s -> %s' % (n, ', '.join('%s(%gms)' % (m, plan.nbr[n][m])
                                               for m in plan.neighbors(n))))
+    summary('探测端点主机 (%d): %s (探针地址在主机上, 路由器 SID 用 End.DX6 交付)'
+            % (len(plan.nodes), ' '.join(plan.host[n] for n in plan.nodes)))
     summary('Design 3 分区 (%d 个): %s'
             % (len(groups), ' | '.join(','.join(grp) for grp in groups)))
 
@@ -109,13 +112,20 @@ def main():
                     help='--simulate 下的测量噪声幅度 (ms)')
     ap.add_argument('--port', type=int, default=9999)
     ap.add_argument('--timeout', type=float, default=3.0, help='单次探测超时 (s)')
+    ap.add_argument('--logdir', default=None,
+                    help='响应端日志/出口表的目录 (默认 <仓库>/logs)')
     ap.add_argument('--log', default=None)
     args = ap.parse_args()
     if not args.simulate and os.geteuid() != 0:
         sys.exit('[FATAL] 真实拓扑需要 root: sudo python3 integration/closed_loop.py '
                  '(或用 --simulate 免 root 跑模型)')
 
-    lp = attach_file_log('closed_loop', args.log)
+    logdir = args.logdir or os.path.join(ROOT, 'logs')
+    os.makedirs(logdir, exist_ok=True)
+    lp = attach_file_log('closed_loop',
+                         args.log or os.path.join(
+                             logdir,
+                             'closed_loop_%s.log' % time.strftime('%Y%m%d_%H%M%S')))
     if lp:
         summary('>>>>> log: %s' % lp)
 
@@ -139,7 +149,8 @@ def main():
         if args.simulate:
             harness = ModelHarness(plan, truth, noise=args.noise)
         else:
-            harness = build_mininet(plan, port=args.port, timeout=args.timeout)
+            harness = build_mininet(plan, port=args.port, timeout=args.timeout,
+                                    logdir=logdir)
             harness.start_responders()
 
         # ---- 基线: 全互联 + Design 2 反解 ----
