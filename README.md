@@ -5,15 +5,14 @@ Latency Bottleneck Links in SRv6 Networks*（**ICNP 2025, CCF-B**）的核心设
 全部跑在真实 Linux 数据面上（内核 SRv6 / IPv6 ECMP / netem），不依赖模拟器；
 算法在本仓**独立实现**，不复用作者源码。
 
-复现内容分三部分，目前已完成前两部分：
+复现内容分三部分，均已完成：
 
 - **Design 1 — 确定性 SR 环回探测**：用 SRv6 把探测包的**正向和反向路径都钉死**，
   把一个包的端到端 RTT 精确归因到指定路径。
 - **Design 2 — 基于时延的多路径推断**：SR 的 SID 之间仍有 ECMP 歧义，用少量端到端
   观测反解每条链路的时延，定位瓶颈。
-
-> Design 3（拓扑无关的渐进式诊断：分区剪枝 + 渐进探测 + 跨切片故障优先）是纯探测
-> 规划算法，待实现；目录结构已为它预留 `design3/`。
+- **Design 3 — 拓扑无关的渐进式诊断**：三层剪枝的探测规划（模块度分区 + 渐进探测 +
+  跨切片故障优先），把探测数压到 Pingmesh 全互联的 1/10 量级且不丢瓶颈可见性。
 
 ---
 
@@ -25,23 +24,25 @@ Latency Bottleneck Links in SRv6 Networks*（**ICNP 2025, CCF-B**）的核心设
 lib/        共享库（Mininet/SRv6 工具 + 日志落盘）
 design1/    确定性 SR 环回探测
 design2/    基于时延的多路径推断
-design3/    拓扑无关的渐进式诊断（待实现）
+design3/    拓扑无关的渐进式诊断（探测规划 + 离线评测）
 tools/      本地工具（拓扑绘图，不提交）
 logs/ topo/ 运行时产物（不提交）
 ```
 
-| 文件                            | 作用                                                                                            |
-| ------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `lib/common.py`                 | 共享 Mininet/SRv6 工具：`Router`、`add6`、`enable_seg6`、`run_cmd`、`section`、`print_topology` |
-| `lib/mnlog.py`                  | 日志落盘（Mininet 的 info 输出走 stderr，直接重定向会丢）                                       |
-| `design1/demo.py`               | Design 1 编排：钻石拓扑 + SID 行为（End.X/End.DX6）+ 按模式启动探测/响应                        |
-| `design1/probe.py`              | Design 1 的**发起端 + 用户态响应端**（3 个子命令，见下）                                        |
-| `design1/responder.bpf.c`       | Design 1 的**内核态** TC eBPF 响应端（`bpf_skb_adjust_room` 扩包 + 构造 SRH + `bpf_redirect`）  |
-| `design2/infer.py`              | Design 2 推断算法（论文式 1–4 + Algorithm 1），附内置自测与合成场景评估                         |
-| `design2/single_mininet.py`     | Design 2 端到端：单 ECMP 点，netem 真值 + IPv6 ECMP 观测 + SRv6 定向观测                        |
-| `design2/ambiguous_mininet.py`  | Design 2 端到端：两个 ECMP 点串联，理论 4 种路径组合                                            |
-| `design2/states_mininet.py`     | Design 2 端到端：三个 ECMP 点，一次运行覆盖 A/B/C/D 四种分支状态                                |
-| `design2/oneway.py`             | 单向 UDP 时间戳探测工具（避免 ping RTT/2 被非对称回程污染）                                     |
+| 文件                           | 作用                                                                                            |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `lib/common.py`                | 共享 Mininet/SRv6 工具：`Router`、`add6`、`enable_seg6`、`run_cmd`、`section`、`print_topology` |
+| `lib/mnlog.py`                 | 日志落盘（Mininet 的 info 输出走 stderr，直接重定向会丢）                                       |
+| `design1/demo.py`              | Design 1 编排：钻石拓扑 + SID 行为（End.X/End.DX6）+ 按模式启动探测/响应                        |
+| `design1/probe.py`             | Design 1 的**发起端 + 用户态响应端**（3 个子命令，见下）                                        |
+| `design1/responder.bpf.c`      | Design 1 的**内核态** TC eBPF 响应端（`bpf_skb_adjust_room` 扩包 + 构造 SRH + `bpf_redirect`）  |
+| `design2/infer.py`             | Design 2 推断算法（论文式 1–4 + Algorithm 1），附内置自测与合成场景评估                         |
+| `design2/single_mininet.py`    | Design 2 端到端：单 ECMP 点，netem 真值 + IPv6 ECMP 观测 + SRv6 定向观测                        |
+| `design2/ambiguous_mininet.py` | Design 2 端到端：两个 ECMP 点串联，理论 4 种路径组合                                            |
+| `design2/states_mininet.py`    | Design 2 端到端：三个 ECMP 点，一次运行覆盖 A/B/C/D 四种分支状态                                |
+| `design2/oneway.py`            | 单向 UDP 时间戳探测工具（避免 ping RTT/2 被非对称回程污染）                                     |
+| `design3/plan.py`              | Design 3 探测规划算法（式 11 分区 + Algorithm 2/3 + 跨切片优先），附内置自测                    |
+| `design3/eval.py`              | Design 3 三层剪枝离线评测：合成拓扑 + 故障注入 + 削减比例（免 root）                            |
 
 子目录里的脚本用 `__file__` 定位仓库根并加入 `sys.path`，再
 `from lib.common import ...` / `from design2.infer import ...`，因此不依赖当前工作目录；
@@ -156,6 +157,58 @@ SR 把路径钉到 SID 粒度，但 SID 对之间仍有 ECMP。观测到端到�
 
 ---
 
+## Design 3：拓扑无关的渐进式诊断
+
+Design 3 是**纯探测规划**（不碰数据面、不需要 root）：给定拓扑和一个切片（论文取
+70% 节点），决定**探哪些节点对、按什么顺序探**。三层剪枝叠乘，目标是在不丢瓶颈可见性
+的前提下，把探测数压到 Pingmesh 全互联（每对节点都探）的 1/10 量级。
+
+### Step 1 分区探测（论文式 11 / Algorithm 2）
+
+对切片子图做单层 Louvain 贪心模块度最大化（`plan.partition`）：初始每节点独立成区，
+反复把节点移到让 ΔQ 最大的「相邻分区」，直到整轮没有任何移动。计划由三部分组成：
+
+- **分区内全互联**：每个分区内所有节点对都探，路径**限制在分区诱导子图内**（对应论文
+  里 SR-TE 把路径约束在分区内），这样分区内部的边才可能被覆盖；
+- **代表节点跨分区全互联**：每个分区取分区内度数最大的节点当代表，代表之间再全互联；
+- **覆盖补齐**：仍没被任何探测路径覆盖的边，用两端点直连补上，保证论文式 (6)
+  「每条边至少落在一条探测路径上」。
+
+### Step 2 渐进探测（Algorithm 3）
+
+长路径正常 ⇒ 它包含的所有短路径都正常（论文 Fig. 8 的 A-D 正常 ⇒ A-B、B-D 都正常），
+于是被正常路径包含的待探路径**直接免探**：
+
+- 每轮只探「极大路径」（不被本轮待探集合里其他路径包含），批内按路径长度降序；
+- 探到正常的路径，立刻把被它包含的路径从待探集合里删掉；
+- **异常路径不产生任何免探**：它包含的短路径仍要探，才能把故障收敛到具体链路。
+
+论文 Algorithm 3 的字面写法（第 4–8 行只在正常集 N 里查包含关系）在第一轮 N 为空时会把
+所有待探路径都选进 S，退化成全量探测、拿不到论文正文声称的剪枝；本实现按**正文语义**
+做（极大路径优先 + 正常路径的子路径免探），因此有剪枝且通常两轮收敛（实测平均 1.7–2.7 轮）。
+
+### Step 3 跨切片故障优先
+
+按论文的两条规则重排探测顺序：覆盖了**别的切片里已故障链路**的路径优先、覆盖了**还没被
+别的切片探过链路**的路径优先；一旦**所有故障链路都已被某条异常路径覆盖就提前终止**。
+跨切片故障传播按论文的 3% 概率模拟。
+
+### 自测（`python3 design3/plan.py`，5/5 通过）
+
+| 检查         | 内容                                                                             |
+| ------------ | -------------------------------------------------------------------------------- |
+| 式 (11) 一致 | 直接求和 vs 增量 ΔQ 逐次比对，最大偏差 4.2e-17                                   |
+| 分区正确性   | 两个三角形 + 一条桥 → 恰好切成两个社区，Q = 0.3571                               |
+| 覆盖完备性   | 分区计划覆盖切片全部 10 条边，无遗漏                                             |
+| 渐进探测     | A→D 正常 ⇒ 其余 4 条免探（1 轮 1 条）；B-C 故障 ⇒ 两轮收敛到 B-C                 |
+| 跨切片优先   | 命中「已故障 / 未探过」的路径排到最前                                            |
+
+链路级候选集由「所有异常路径的链路交集 − 所有正常路径的链路」得到（`plan.localize`）；
+在「路径异常 ⇔ 含故障链路」的确定性模型下，实测候选集恰好收敛到被注入的那条链路
+（`候选/故障 = 1.00x`）；有测量噪声时由 Design 2 反解。
+
+---
+
 ## 运行
 
 ```bash
@@ -168,6 +221,11 @@ python3 design2/infer.py                              # 算法自测 + 合成场
 sudo python3 design2/single_mininet.py --test         # 单 ECMP 点：Mininet + netem 真值
 sudo python3 design2/ambiguous_mininet.py --test      # 两个 ECMP 点（4 种路径组合）
 sudo python3 design2/states_mininet.py --test         # 三个 ECMP 点：覆盖 A/B/C/D 四种分支状态
+
+# --- Design 3 ---
+python3 design3/plan.py                               # 规划算法自测（式 11 / 覆盖 / 渐进 / 优先）
+python3 design3/eval.py                               # 三层剪枝离线评测（合成拓扑，免 root）
+python3 design3/eval.py --slices 256 --repeat 5 --faults 1   # 更大规模、更稳的均值
 
 # --- 本地工具 ---
 python3 tools/topo_viz.py                             # 生成 topo/design2_states_mininet.{dot,png,svg}
@@ -186,7 +244,7 @@ sudo python3 design2/states_mininet.py --test
 脚本把**关键结果**以 `[RESULT]` 前缀（同时进终端与日志）打印出来，原始命令输出只写日志
 （`[INFO]`/`[RESULT]` 之外的细节走 `detail`）。例如 `design1/demo.py`：
 
-```
+```shell
 [INFO] 正向 (内核 encap): h1 -> r1 -> r2 -> r4 -> h2, SID = [2001:db8:100::2, 2001:db8:100::4], 理论单向 6 ms
 [INFO] 反向 (payload 藏列表): h2 -> r4 -> r3 -> r1 -> h1, SID = [2001:db8:100::3, 2001:db8:100::1], 理论单向 42 ms
 [INFO] 环回 RTT 理论值 = 48 ms (正向 6 + 反向 42)
@@ -226,6 +284,28 @@ sudo python3 design2/states_mininet.py --test
 > 说明：Mininet 场景里每条链路都有确定性观测直接测出，端到端 ECMP 样本主要用于
 > **一致性校验**（验证歧义观测与已解链路自洽），而非在完全盲的条件下定位瓶颈。
 
+### Design 3 三层剪枝消融（`python3 design3/eval.py`，合成拓扑，免 root）
+
+4 个合成拓扑 × 256 切片 × 5 轮，切片取 70% 节点，每切片注入 1 条故障链路；「削减」
+与论文 Table III 同口径（每层相对上一层，总体相对全互联基线）：
+
+| 拓扑（18–20 节点）     | 全互联   | Step 1   | 削减    | Step 1+2   | 削减    | Step 1+2+3   | 削减    | 总削减   | 轮数   |
+| ---------------------- | -------- | -------- | ------- | ---------- | ------- | ------------ | ------- | -------- | ------ |
+| ISP 三层（模块度高）   | 78       | 24.0     | 69.2%   | 9.1        | 62.3%   | 3.7          | 58.9%   | 95.2%    | 2.72   |
+| SD-WAN 六站点（中）    | 78       | 21.0     | 73.1%   | 7.3        | 65.0%   | 3.8          | 48.9%   | 95.2%    | 2.20   |
+| DC 叶脊（模块度低）    | 78       | 27.3     | 65.0%   | 15.2       | 44.4%   | 7.2          | 52.8%   | 90.8%    | 1.69   |
+| 随机图（无结构）       | 91       | 28.1     | 69.1%   | 15.3       | 45.5%   | 7.3          | 52.5%   | 92.0%    | 1.70   |
+| 论文 Table III         | —        | —        | 50.6%   | —          | 66.2%   | —            | 51.4%   | 91.9%    | —      |
+
+- **总体削减** 90.8–95.2%（平均 93.3%）与论文 91.9% 对齐；定性趋势也一致——模块度低的
+  DC 拓扑收益最低。
+- **Step 2 与 Step 3 的口径**：Step 2 在健康网络上衡量（纯路径感知剪枝），Step 3 才
+  注入故障，并按跨切片故障优先 + 提前终止衡量故障感知剪枝。
+- **正确性**：漏探 0（被剪掉的路径一定不含故障链路，因为只剪被正常路径包含的路径）、
+  漏检 0（每条故障链路都被某条被探的异常路径覆盖）、候选/故障 1.00x。
+- 与论文的差异：Step 1 偏强（65–73% vs 50.6%）、Step 2 偏弱（44–65% vs 66.2%），
+  原因见「已知局限」。
+
 ---
 
 ## 环境
@@ -233,6 +313,7 @@ sudo python3 design2/states_mininet.py --test
 - WSL2，kernel 6.18，内核内置 SRv6（`IPV6_SEG6_LWTUNNEL=y` / `NET_CLS_BPF=y`）
 - Mininet 2.3.0、iproute2 6.19、Python 3.14（`numpy` 2.4）、clang 21、bpftool 7.7
 - 用户态路径与 `design2/infer.py` 仅需 Python 标准库 + numpy
+- `design3/` 只用 Python 标准库（分区 / 最短路 / 渐进探测全部手写，不引入 networkx 等依赖）
 
 ---
 
@@ -260,3 +341,8 @@ sudo python3 design2/states_mininet.py --test
   （两个 ECMP 点倾向于同时选直连或同时选绕行），另外 2 种组合未被观测到。
 - 端到端脚本仍依赖逐链路确定性观测；纯粹「只用端到端观测」的盲推断有待进一步验证。
 - Design 1 的 eBPF 响应端仅支持最多 8 段（`MAX_SIDS`），且需外部注入 MAC/ifindex 配置。
+- Design 3 的评测跑在**合成拓扑**上（18–20 节点），论文用的是 10 个 REPETITA 真实拓扑 ×
+  4096 切片：合成切片小、社区偏多，代表节点全互联（C(k,2)）在 Step 1 的总量里占比高，
+  所以 Step 1 削减比论文强；论文的 ILP 还额外约束跨分区的可见性，需要更多跨分区探测对。
+  Step 2 比论文弱，则是合成切片的路径更短、路径包含关系不如真实拓扑丰富所致。
+- Design 3 只做**规划**，不在数据面上验证：探测由 Design 1 执行、链路时延由 Design 2 反解。
