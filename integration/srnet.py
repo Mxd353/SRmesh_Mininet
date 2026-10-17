@@ -64,6 +64,9 @@ def load_topology(path=FITI):
 
     节点名用 abbr (bj/sh/xa ...), weight 直接当 netem 时延 (1/2/4 ms).
     """
+    if not os.path.exists(path):
+        raise SystemExit('[FATAL] 缺少拓扑文件 %s (闭环集成依赖 integration/fiti.json)'
+                         % path)
     with open(path, encoding='utf-8') as f:
         d = json.load(f)
     abbr = {n['id']: n['abbr'] for n in d['nodes']}

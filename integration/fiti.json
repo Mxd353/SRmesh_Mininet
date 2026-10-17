@@ -1,0 +1,564 @@
+{
+    "nodes": [
+        {
+            "id": "1",
+            "name": "北京",
+            "abbr": "bj",
+            "x": 86,
+            "y": -59,
+            "degree": 11
+        },
+        {
+            "id": "2",
+            "name": "上海",
+            "abbr": "sh",
+            "x": 204,
+            "y": 59,
+            "degree": 5
+        },
+        {
+            "id": "3",
+            "name": "西安",
+            "abbr": "xa",
+            "x": -12,
+            "y": 19,
+            "degree": 6
+        },
+        {
+            "id": "4",
+            "name": "南京",
+            "abbr": "nj",
+            "x": 173,
+            "y": 104,
+            "degree": 2
+        },
+        {
+            "id": "5",
+            "name": "广州",
+            "abbr": "gz",
+            "x": 87,
+            "y": 240,
+            "degree": 6
+        },
+        {
+            "id": "6",
+            "name": "沈阳",
+            "abbr": "sy",
+            "x": 192,
+            "y": -123,
+            "degree": 3
+        },
+        {
+            "id": "7",
+            "name": "武汉",
+            "abbr": "wh",
+            "x": 87,
+            "y": 107,
+            "degree": 6
+        },
+        {
+            "id": "8",
+            "name": "成都",
+            "abbr": "cd",
+            "x": -71,
+            "y": 107,
+            "degree": 4
+        },
+        {
+            "id": "9",
+            "name": "北大",
+            "abbr": "pku",
+            "x": 66,
+            "y": -156,
+            "degree": 1
+        },
+        {
+            "id": "10",
+            "name": "北邮",
+            "abbr": "bupt",
+            "x": 119,
+            "y": -144,
+            "degree": 1
+        },
+        {
+            "id": "11",
+            "name": "北航",
+            "abbr": "buaa",
+            "x": 31,
+            "y": -124,
+            "degree": 1
+        },
+        {
+            "id": "12",
+            "name": "复旦",
+            "abbr": "fudan",
+            "x": 245,
+            "y": 40,
+            "degree": 1
+        },
+        {
+            "id": "13",
+            "name": "同济",
+            "abbr": "tongji",
+            "x": 245,
+            "y": 95,
+            "degree": 1
+        },
+        {
+            "id": "14",
+            "name": "天津",
+            "abbr": "tjn",
+            "x": 131,
+            "y": -40,
+            "degree": 2
+        },
+        {
+            "id": "15",
+            "name": "合肥",
+            "abbr": "hef",
+            "x": 145,
+            "y": 75,
+            "degree": 2
+        },
+        {
+            "id": "16",
+            "name": "厦门",
+            "abbr": "xmn",
+            "x": 173,
+            "y": 199,
+            "degree": 2
+        },
+        {
+            "id": "17",
+            "name": "重庆",
+            "abbr": "chq",
+            "x": -11,
+            "y": 107,
+            "degree": 2
+        },
+        {
+            "id": "18",
+            "name": "兰州",
+            "abbr": "lzh",
+            "x": -71,
+            "y": 24,
+            "degree": 1
+        },
+        {
+            "id": "19",
+            "name": "哈尔滨",
+            "abbr": "hrb",
+            "x": 225,
+            "y": -188,
+            "degree": 1
+        },
+        {
+            "id": "20",
+            "name": "杭州",
+            "abbr": "hzh",
+            "x": 204,
+            "y": 74,
+            "degree": 3
+        },
+        {
+            "id": "21",
+            "name": "长春",
+            "abbr": "chc",
+            "x": 226,
+            "y": -148,
+            "degree": 2
+        },
+        {
+            "id": "22",
+            "name": "大连",
+            "abbr": "dln",
+            "x": 192,
+            "y": -55,
+            "degree": 1
+        },
+        {
+            "id": "23",
+            "name": "济南",
+            "abbr": "jnn",
+            "x": 145,
+            "y": 1,
+            "degree": 3
+        },
+        {
+            "id": "24",
+            "name": "长沙",
+            "abbr": "chs",
+            "x": 87,
+            "y": 154,
+            "degree": 2
+        },
+        {
+            "id": "25",
+            "name": "郑州",
+            "abbr": "zhz",
+            "x": 88,
+            "y": 33,
+            "degree": 2
+        },
+        {
+            "id": "26",
+            "name": "深圳",
+            "abbr": "szh",
+            "x": 116,
+            "y": 256,
+            "degree": 1
+        },
+        {
+            "id": "27",
+            "name": "石家庄",
+            "abbr": "sjz",
+            "x": 104,
+            "y": -26,
+            "degree": 1
+        },
+        {
+            "id": "28",
+            "name": "太原",
+            "abbr": "tyn",
+            "x": 28,
+            "y": -26,
+            "degree": 1
+        },
+        {
+            "id": "29",
+            "name": "呼和浩特",
+            "abbr": "hht",
+            "x": 32,
+            "y": -81,
+            "degree": 1
+        },
+        {
+            "id": "30",
+            "name": "福州",
+            "abbr": "fzh",
+            "x": 185,
+            "y": 155,
+            "degree": 1
+        },
+        {
+            "id": "31",
+            "name": "南昌",
+            "abbr": "nch",
+            "x": 121,
+            "y": 171,
+            "degree": 1
+        },
+        {
+            "id": "32",
+            "name": "青岛",
+            "abbr": "qda",
+            "x": 175,
+            "y": 1,
+            "degree": 1
+        },
+        {
+            "id": "33",
+            "name": "南宁",
+            "abbr": "nan",
+            "x": 9,
+            "y": 238,
+            "degree": 1
+        },
+        {
+            "id": "34",
+            "name": "海口",
+            "abbr": "hak",
+            "x": 51,
+            "y": 311,
+            "degree": 1
+        },
+        {
+            "id": "35",
+            "name": "贵阳",
+            "abbr": "gyn",
+            "x": -11,
+            "y": 160,
+            "degree": 1
+        },
+        {
+            "id": "36",
+            "name": "昆明",
+            "abbr": "kmn",
+            "x": -72,
+            "y": 203,
+            "degree": 1
+        },
+        {
+            "id": "37",
+            "name": "拉萨",
+            "abbr": "lsa",
+            "x": -246,
+            "y": 100,
+            "degree": 1
+        },
+        {
+            "id": "38",
+            "name": "西宁",
+            "abbr": "xnn",
+            "x": -112,
+            "y": 35,
+            "degree": 1
+        },
+        {
+            "id": "39",
+            "name": "银川",
+            "abbr": "ych",
+            "x": -72,
+            "y": -22,
+            "degree": 1
+        },
+        {
+            "id": "40",
+            "name": "乌鲁木齐",
+            "abbr": "wlq",
+            "x": -250,
+            "y": -135,
+            "degree": 1
+        },
+        {
+            "id": "41",
+            "name": "中关村",
+            "abbr": "zgc",
+            "x": 130,
+            "y": -95,
+            "degree": 1
+        }
+    ],
+    "links": [
+        {
+            "src": "1",
+            "dst": "9",
+            "weight": 4
+        },
+        {
+            "src": "1",
+            "dst": "10",
+            "weight": 4
+        },
+        {
+            "src": "1",
+            "dst": "11",
+            "weight": 4
+        },
+        {
+            "src": "1",
+            "dst": "41",
+            "weight": 4
+        },
+        {
+            "src": "1",
+            "dst": "29",
+            "weight": 2
+        },
+        {
+            "src": "1",
+            "dst": "37",
+            "weight": 1
+        },
+        {
+            "src": "1",
+            "dst": "28",
+            "weight": 2
+        },
+        {
+            "src": "1",
+            "dst": "25",
+            "weight": 4
+        },
+        {
+            "src": "1",
+            "dst": "14",
+            "weight": 4
+        },
+        {
+            "src": "1",
+            "dst": "6",
+            "weight": 4
+        },
+        {
+            "src": "1",
+            "dst": "27",
+            "weight": 2
+        },
+        {
+            "src": "6",
+            "dst": "21",
+            "weight": 4
+        },
+        {
+            "src": "6",
+            "dst": "22",
+            "weight": 4
+        },
+        {
+            "src": "21",
+            "dst": "19",
+            "weight": 4
+        },
+        {
+            "src": "14",
+            "dst": "23",
+            "weight": 4
+        },
+        {
+            "src": "23",
+            "dst": "32",
+            "weight": 2
+        },
+        {
+            "src": "23",
+            "dst": "2",
+            "weight": 4
+        },
+        {
+            "src": "2",
+            "dst": "12",
+            "weight": 4
+        },
+        {
+            "src": "2",
+            "dst": "13",
+            "weight": 4
+        },
+        {
+            "src": "2",
+            "dst": "20",
+            "weight": 4
+        },
+        {
+            "src": "20",
+            "dst": "30",
+            "weight": 2
+        },
+        {
+            "src": "20",
+            "dst": "16",
+            "weight": 4
+        },
+        {
+            "src": "16",
+            "dst": "5",
+            "weight": 4
+        },
+        {
+            "src": "5",
+            "dst": "26",
+            "weight": 2
+        },
+        {
+            "src": "5",
+            "dst": "33",
+            "weight": 2
+        },
+        {
+            "src": "5",
+            "dst": "34",
+            "weight": 2
+        },
+        {
+            "src": "5",
+            "dst": "24",
+            "weight": 4
+        },
+        {
+            "src": "24",
+            "dst": "7",
+            "weight": 4
+        },
+        {
+            "src": "7",
+            "dst": "25",
+            "weight": 4
+        },
+        {
+            "src": "7",
+            "dst": "15",
+            "weight": 4
+        },
+        {
+            "src": "7",
+            "dst": "31",
+            "weight": 2
+        },
+        {
+            "src": "7",
+            "dst": "17",
+            "weight": 4
+        },
+        {
+            "src": "15",
+            "dst": "4",
+            "weight": 4
+        },
+        {
+            "src": "4",
+            "dst": "2",
+            "weight": 4
+        },
+        {
+            "src": "17",
+            "dst": "8",
+            "weight": 4
+        },
+        {
+            "src": "3",
+            "dst": "1",
+            "weight": 4
+        },
+        {
+            "src": "3",
+            "dst": "18",
+            "weight": 4
+        },
+        {
+            "src": "3",
+            "dst": "38",
+            "weight": 2
+        },
+        {
+            "src": "3",
+            "dst": "40",
+            "weight": 1
+        },
+        {
+            "src": "3",
+            "dst": "39",
+            "weight": 2
+        },
+        {
+            "src": "8",
+            "dst": "3",
+            "weight": 4
+        },
+        {
+            "src": "8",
+            "dst": "35",
+            "weight": 2
+        },
+        {
+            "src": "8",
+            "dst": "36",
+            "weight": 2
+        }
+    ],
+    "statistics": {
+        "total_nodes": 41,
+        "total_links": 43,
+        "degree_distribution": {
+            "degree_1": 27,
+            "degree_2": 8,
+            "degree_3": 3,
+            "degree_4": 1,
+            "degree_5": 1,
+            "degree_6": 3,
+            "degree_11": 1
+        },
+        "highest_degree_node": "北京 (id:1, degree:11)",
+        "average_degree": 2.1
+    }
+}
